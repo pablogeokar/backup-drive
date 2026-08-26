@@ -1,20 +1,31 @@
 import 'package:flutter/material.dart';
 
+import 'pages/home_page.dart';
+
 void main() {
-  runApp(const MainApp());
+  runApp(const BackupDriveApp());
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class BackupDriveApp extends StatelessWidget {
+  const BackupDriveApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello World!'),
-        ),
+    return MaterialApp(
+      title: 'Kontabb Backup Drive',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorSchemeSeed: const Color(0xFF1A73E8),
+        useMaterial3: true,
+        brightness: Brightness.light,
       ),
+      darkTheme: ThemeData(
+        colorSchemeSeed: const Color(0xFF1A73E8),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
+      themeMode: ThemeMode.system,
+      home: const HomePage(),
     );
   }
 }

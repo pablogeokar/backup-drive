@@ -1,4 +1,6 @@
+import 'package:minio/io.dart';
 import 'package:minio/minio.dart';
+import 'package:minio/models.dart';
 
 import 'r2_config.dart';
 
@@ -29,8 +31,12 @@ class R2Client {
 
   /// Lista todos os objetos no bucket, retornando metadados completos.
   /// Usa paginação interna para listar tudo independente do tamanho.
-  Stream<Object> listAllObjects({String prefix = ''}) {
-    return _minio.listObjects(config.bucketName, prefix: prefix, recursive: true);
+  Stream<ListObjectsResult> listAllObjects({String prefix = ''}) {
+    return _minio.listObjects(
+      config.bucketName,
+      prefix: prefix,
+      recursive: true,
+    );
   }
 
   /// Obtém os metadados (stat) de um objeto específico.

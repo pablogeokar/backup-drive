@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:minio/models.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -62,6 +61,19 @@ class SyncProgress {
   }
 }
 
+/// Representação simplificada de um objeto remoto para sync.
+class _RemoteObject {
+  final String key;
+  final int size;
+  final DateTime? lastModified;
+
+  const _RemoteObject({
+    required this.key,
+    required this.size,
+    this.lastModified,
+  });
+}
+
 /// Serviço principal de sincronização R2 → disco local.
 class SyncService {
   final R2Client _client;
@@ -76,11 +88,9 @@ class SyncService {
   /// Flag para cancelar a operação em andamento.
   bool _cancelRequested = false;
 
-  SyncService({
-    required R2Config config,
-    required String localBasePath,
-  })  : _client = R2Client(config: config),
-        _localBasePath = localBasePath;
+  SyncService({required R2Config config, required String localBasePath})
+    : _client = R2Client(config: config),
+      _localBasePath = localBasePath;
 
   /// Caminho base onde os arquivos são salvos localmente.
   String get localBasePath => _localBasePath;
@@ -106,8 +116,8 @@ class SyncService {
 
     try {
       // Fase 1: Listar todos os objetos
-      final objects = <Object>[];
-      await for (final obj in _client.listAllObjects()) {
+      final objects = <_RemoteObject>[];
+      await for (final chunk in _client.listAllObjects()) {
         if (_cancelRequested) {
           _progress = _progress.copyWith(
             status: SyncStatus.idle,
@@ -116,7 +126,18 @@ class SyncService {
           _notifyProgress();
           return;
         }
-        objects.add(obj);
+        for (final obj in chunk.objects) {
+          final key = obj.key ?? '';
+          if (key.isNotEmpty && !key.endsWith('/')) {
+            objects.add(
+              _RemoteObject(
+                key: key,
+                size: obj.size ?? 0,
+                lastModified: obj.lastModified,
+              ),
+            );
+          }
+        }
       }
 
       _progress = _progress.copyWith(
@@ -140,26 +161,14 @@ class SyncService {
           return;
         }
 
-        final key = obj.key ?? '';
-        if (key.isEmpty || key.endsWith('/')) {
-          // Ignorar "pastas" vazias
-          skipped++;
-          _progress = _progress.copyWith(
-            processedObjects: downloaded + skipped + errors,
-            skippedObjects: skipped,
-          );
-          _notifyProgress();
-          continue;
-        }
-
-        _progress = _progress.copyWith(currentFile: key);
+        _progress = _progress.copyWith(currentFile: obj.key);
         _notifyProgress();
 
         try {
-          final needsDownload = await _shouldDownload(key, obj);
+          final needsDownload = await _shouldDownload(obj);
 
           if (needsDownload) {
-            await _downloadObject(key);
+            await _downloadObject(obj.key);
             downloaded++;
           } else {
             skipped++;
@@ -199,8 +208,8 @@ class SyncService {
   ///
   /// Compara tamanho do arquivo local com o tamanho remoto.
   /// Se o arquivo local não existe ou tem tamanho diferente, precisa baixar.
-  Future<bool> _shouldDownload(String key, Object remoteObj) async {
-    final localPath = p.join(_localBasePath, key);
+  Future<bool> _shouldDownload(_RemoteObject remoteObj) async {
+    final localPath = p.join(_localBasePath, remoteObj.key);
     final localFile = File(localPath);
 
     if (!localFile.existsSync()) {
@@ -208,10 +217,9 @@ class SyncService {
     }
 
     final localSize = localFile.lengthSync();
-    final remoteSize = remoteObj.size ?? 0;
 
     // Se o tamanho difere, precisa re-baixar
-    if (localSize != remoteSize) {
+    if (localSize != remoteObj.size) {
       return true;
     }
 
@@ -244,10 +252,7 @@ class SyncService {
   /// Salva o timestamp da última sincronização.
   Future<void> _saveLastSyncTime() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'last_sync_time',
-      DateTime.now().toIso8601String(),
-    );
+    await prefs.setString('last_sync_time', DateTime.now().toIso8601String());
   }
 
   /// Carrega o timestamp da última sincronização.

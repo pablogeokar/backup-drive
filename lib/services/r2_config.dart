@@ -24,7 +24,7 @@ class R2Config {
   });
 
   /// Endpoint S3-compatible do Cloudflare R2.
-  /// Formato: https://<account_id>.r2.cloudflarestorage.com
+  /// Formato: `https://<account_id>.r2.cloudflarestorage.com`
   String get endpoint => '$accountId.r2.cloudflarestorage.com';
 
   /// Configuração de desenvolvimento (bucket "teste").

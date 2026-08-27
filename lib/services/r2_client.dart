@@ -1,4 +1,5 @@
-import 'package:minio/io.dart';
+import 'dart:io';
+
 import 'package:minio/minio.dart';
 import 'package:minio/models.dart';
 
@@ -30,7 +31,6 @@ class R2Client {
   }
 
   /// Lista todos os objetos no bucket, retornando metadados completos.
-  /// Usa paginação interna para listar tudo independente do tamanho.
   Stream<ListObjectsResult> listAllObjects({String prefix = ''}) {
     return _minio.listObjects(
       config.bucketName,
@@ -50,7 +50,28 @@ class R2Client {
   }
 
   /// Faz download de um objeto diretamente para um arquivo local.
+  ///
+  /// Usa getObject + pipe ao invés de fGetObject para evitar problema
+  /// com etag contendo aspas (caractere inválido em nomes de arquivo no Windows).
   Future<void> downloadToFile(String objectName, String filePath) async {
-    await _minio.fGetObject(config.bucketName, objectName, filePath);
+    final dir = File(filePath).parent;
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+
+    final stream = await _minio.getObject(config.bucketName, objectName);
+    final file = File(filePath);
+    final sink = file.openWrite();
+
+    try {
+      await stream.pipe(sink);
+    } catch (e) {
+      // Limpar arquivo parcial em caso de erro
+      await sink.close();
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
+      rethrow;
+    }
   }
 }

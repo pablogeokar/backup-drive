@@ -175,6 +175,8 @@ class SyncService {
           }
         } catch (e) {
           errors++;
+          // Guardar último erro para diagnóstico
+          _progress = _progress.copyWith(errorMessage: '[${obj.key}] $e');
         }
 
         _progress = _progress.copyWith(
@@ -237,15 +239,6 @@ class SyncService {
   /// Faz download de um objeto para o disco local.
   Future<void> _downloadObject(String key) async {
     final localPath = p.join(_localBasePath, key);
-    final localFile = File(localPath);
-
-    // Garantir que o diretório pai existe
-    final dir = localFile.parent;
-    if (!dir.existsSync()) {
-      dir.createSync(recursive: true);
-    }
-
-    // Usar fGetObject para download direto ao arquivo
     await _client.downloadToFile(key, localPath);
   }
 

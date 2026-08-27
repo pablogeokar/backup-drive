@@ -874,6 +874,30 @@ class _HomePageState extends State<HomePage>
                   ),
               ],
             ),
+            if (_progress.errorCount > 0 && _progress.errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(20),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 14, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Último erro: ${_progress.errorMessage}',
+                        style: const TextStyle(fontSize: 11, color: Colors.red),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
 
           // Erro

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/r2_config.dart';
 import '../services/sync_service.dart';
@@ -39,11 +40,16 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _initService() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPath = prefs.getString('backup_path');
+    final savedEnv = prefs.getString('selected_env');
+
     final docsDir = await getApplicationDocumentsDirectory();
     final defaultPath = p.join(docsDir.path, 'KontabbBackup');
 
     setState(() {
-      _localPath = defaultPath;
+      _localPath = savedPath ?? defaultPath;
+      _selectedEnv = savedEnv ?? 'development';
     });
 
     _createSyncService();
@@ -111,12 +117,19 @@ class _HomePageState extends State<HomePage>
     if (result != null) {
       setState(() => _localPath = result);
       _createSyncService();
+      _savePreferences();
     }
   }
 
   bool get _isSyncing =>
       _progress.status == SyncStatus.listing ||
       _progress.status == SyncStatus.downloading;
+
+  Future<void> _savePreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('backup_path', _localPath);
+    await prefs.setString('selected_env', _selectedEnv);
+  }
 
   @override
   void dispose() {
@@ -355,6 +368,7 @@ class _HomePageState extends State<HomePage>
                 setState(() => _selectedEnv = value);
                 _createSyncService();
                 setState(() => _connectionOk = false);
+                _savePreferences();
               },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -477,7 +491,7 @@ class _HomePageState extends State<HomePage>
                           height: 12,
                           child: CircularProgressIndicator(strokeWidth: 1.5),
                         )
-                      : const Text('Testar'),
+                      : const Text('Conectar'),
                 ),
               ),
             ],

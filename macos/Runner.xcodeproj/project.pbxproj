@@ -213,6 +213,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				BKPDB001000000000000001 /* Embed PostgreSQL helper */,
 			);
 			buildRules = (
 			);
@@ -301,6 +302,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		BKPDB001000000000000001 /* Embed PostgreSQL helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PROJECT_DIR}/../../backup-restore/main.go",
+			);
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/../MacOS/kontabb-bkp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nSRC=\"${PROJECT_DIR}/../../backup-restore\"\nOUT=\"${TARGET_BUILD_DIR}/${EXECUTABLES_FOLDER_PATH}/kontabb-bkp\"\nmkdir -p \"$(dirname \"$OUT\")\"\nGOCACHE=\"${PROJECT_DIR}/../../.go-cache\" go build -C \"$SRC\" -o \"$OUT\" .\nchmod 755 \"$OUT\"\n";
+		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

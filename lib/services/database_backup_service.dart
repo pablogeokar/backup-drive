@@ -18,10 +18,21 @@ class DatabaseBackupService {
 
   String get helperPath {
     final executableDir = File(Platform.resolvedExecutable).parent.path;
-    final bundled = File('$executableDir/kontabb-bkp');
-    if (bundled.existsSync()) return bundled.path;
-    final cwd = Directory.current.path;
-    return '$cwd/../backup-restore/bin/kontabb-bkp';
+    final candidates = <String>[
+      '$executableDir/kontabb-bkp',
+      // Flutter macOS debug runs the Dart executable outside the app bundle.
+      '${Directory.current.path}/../backup-restore/bin/kontabb-bkp',
+      '${Directory.current.path}/backup-restore/bin/kontabb-bkp',
+    ];
+    for (final candidate in candidates) {
+      if (File(candidate).existsSync()) return candidate;
+    }
+    throw ProcessException(
+      'kontabb-bkp',
+      const [],
+      'Helper PostgreSQL não encontrado. Recompile o aplicativo para empacotar o binário.',
+      127,
+    );
   }
 
   Future<DatabaseBackupResult> run({

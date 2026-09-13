@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/database_backup_service.dart';
 
@@ -20,10 +24,56 @@ class _DatabasePageState extends State<DatabasePage> {
   bool _dryRun = true;
   bool _noTruncate = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _env.text = prefs.getString('database_env_path') ?? '';
+      _schema.text = prefs.getString('database_schema') ?? 'public';
+      _output = prefs.getString('database_output_path');
+      _input = prefs.getString('database_input_path');
+      _dryRun = prefs.getBool('database_dry_run') ?? true;
+      _noTruncate = prefs.getBool('database_no_truncate') ?? false;
+    });
+  }
+
+  Future<void> _savePreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('database_env_path', _env.text.trim());
+    await prefs.setString('database_schema', _schema.text.trim());
+    if (_output == null) {
+      await prefs.remove('database_output_path');
+    } else {
+      await prefs.setString('database_output_path', _output!);
+    }
+    if (_input == null) {
+      await prefs.remove('database_input_path');
+    } else {
+      await prefs.setString('database_input_path', _input!);
+    }
+    await prefs.setBool('database_dry_run', _dryRun);
+    await prefs.setBool('database_no_truncate', _noTruncate);
+  }
+
   Future<void> _pickEnv() async {
-    final r = await FilePicker.pickFiles(type: FileType.any);
-    if (r?.files.single.path != null) {
-      setState(() => _env.text = r!.files.single.path!);
+    String? path;
+    if (Platform.isMacOS) {
+      path = await const MethodChannel(
+        'backup_drive/env_picker',
+      ).invokeMethod<String>('pickEnv');
+    } else {
+      final r = await FilePicker.pickFiles(type: FileType.any);
+      path = r?.files.single.path;
+    }
+    if (path != null) {
+      setState(() => _env.text = path!);
+      await _savePreferences();
     }
   }
 
@@ -34,6 +84,7 @@ class _DatabasePageState extends State<DatabasePage> {
     );
     if (r != null) {
       setState(() => _output = r);
+      await _savePreferences();
     }
   }
 
@@ -41,6 +92,7 @@ class _DatabasePageState extends State<DatabasePage> {
     final r = await FilePicker.pickFiles(type: FileType.any);
     if (r?.files.single.path != null) {
       setState(() => _input = r!.files.single.path!);
+      await _savePreferences();
     }
   }
 
@@ -62,25 +114,36 @@ class _DatabasePageState extends State<DatabasePage> {
       _busy = true;
       _log = '';
     });
-    final result = await _service.run(
-      operation: op,
-      envFile: _env.text.trim(),
-      outputFile: _output,
-      inputFile: _input,
-      dryRun: _dryRun,
-      noTruncate: _noTruncate,
-      schema: _schema.text.trim().isEmpty ? 'public' : _schema.text.trim(),
-      onLine: (line) {
-        if (mounted) setState(() => _log += '$line\n');
-      },
-    );
-    if (mounted) {
-      setState(() => _busy = false);
-      _message(
-        result.succeeded
-            ? 'Operação concluída.'
-            : 'Operação falhou (código ${result.exitCode}).',
+    await _savePreferences();
+    try {
+      final result = await _service.run(
+        operation: op,
+        envFile: _env.text.trim(),
+        outputFile: _output,
+        inputFile: _input,
+        dryRun: _dryRun,
+        noTruncate: _noTruncate,
+        schema: _schema.text.trim().isEmpty ? 'public' : _schema.text.trim(),
+        onLine: (line) {
+          if (mounted) setState(() => _log += '$line\n');
+        },
       );
+      if (mounted) {
+        setState(() => _busy = false);
+        _message(
+          result.succeeded
+              ? 'Operação concluída.'
+              : 'Operação falhou (código ${result.exitCode}).',
+        );
+      }
+    } on ProcessException catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _log = e.message;
+        });
+        _message(e.message);
+      }
     }
   }
 
@@ -205,7 +268,12 @@ class _DatabasePageState extends State<DatabasePage> {
         const SizedBox(height: 12),
         SwitchListTile(
           value: _dryRun,
-          onChanged: _busy ? null : (v) => setState(() => _dryRun = v),
+          onChanged: _busy
+              ? null
+              : (v) {
+                  setState(() => _dryRun = v);
+                  _savePreferences();
+                },
           title: const Text('Restore em modo simulação (dry-run)'),
           subtitle: const Text(
             'Executa e valida dentro de uma transação com rollback.',
@@ -213,7 +281,12 @@ class _DatabasePageState extends State<DatabasePage> {
         ),
         SwitchListTile(
           value: _noTruncate,
-          onChanged: _busy ? null : (v) => setState(() => _noTruncate = v),
+          onChanged: _busy
+              ? null
+              : (v) {
+                  setState(() => _noTruncate = v);
+                  _savePreferences();
+                },
           title: const Text('Não truncar tabelas antes do restore'),
         ),
         const SizedBox(height: 16),

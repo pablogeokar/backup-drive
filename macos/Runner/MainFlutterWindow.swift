@@ -2,6 +2,7 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
+  private static var scopedEnvURL: URL?
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -23,6 +24,10 @@ class MainFlutterWindow: NSWindow {
       panel.showsHiddenFiles = true
       panel.title = "Selecione o arquivo .env"
       if panel.runModal() == .OK, let url = panel.url {
+        MainFlutterWindow.scopedEnvURL?.stopAccessingSecurityScopedResource()
+        if url.startAccessingSecurityScopedResource() {
+          MainFlutterWindow.scopedEnvURL = url
+        }
         result(url.path)
       } else {
         result(nil)

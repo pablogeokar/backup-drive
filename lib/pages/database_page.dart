@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
 
 import '../services/database_backup_service.dart';
 
@@ -36,7 +37,12 @@ class _DatabasePageState extends State<DatabasePage> {
     setState(() {
       _env.text = prefs.getString('database_env_path') ?? '';
       _schema.text = prefs.getString('database_schema') ?? 'public';
-      _output = prefs.getString('database_output_path');
+      final savedOutput = prefs.getString('database_output_path');
+      // Do not reuse paths created by the old file based picker; macOS maps
+      // those to the app sandbox temporary directory.
+      _output = savedOutput != null && (savedOutput.contains('/tmp/') || savedOutput.endsWith('/tmp/backup.sql.gz'))
+          ? null
+          : savedOutput;
       _input = prefs.getString('database_input_path');
       _dryRun = prefs.getBool('database_dry_run') ?? true;
       _noTruncate = prefs.getBool('database_no_truncate') ?? false;
@@ -78,12 +84,12 @@ class _DatabasePageState extends State<DatabasePage> {
   }
 
   Future<void> _pickOutput() async {
-    final r = await FilePicker.saveFile(
-      fileName: 'backup.sql.gz',
-      type: FileType.any,
+    final r = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Selecione a pasta para salvar o backup',
+      lockParentWindow: true,
     );
     if (r != null) {
-      setState(() => _output = r);
+      setState(() => _output = p.join(r, 'backup.sql.gz'));
       await _savePreferences();
     }
   }
@@ -143,6 +149,11 @@ class _DatabasePageState extends State<DatabasePage> {
           _log = e.message;
         });
         _message(e.message);
+      }
+    } on FileSystemException catch (e) {
+      if (mounted) {
+        setState(() { _busy = false; _log = e.message; });
+        _message('Não foi possível ler o arquivo .env: ${e.message}');
       }
     }
   }
@@ -239,7 +250,7 @@ class _DatabasePageState extends State<DatabasePage> {
             FilledButton.icon(
               onPressed: _busy ? null : _pickOutput,
               icon: const Icon(Icons.save_alt),
-              label: const Text('Escolher saída'),
+              label: const Text('Escolher pasta de saída'),
             ),
             FilledButton.icon(
               onPressed: _busy ? null : () => _run(DatabaseOperation.backup),

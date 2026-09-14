@@ -308,14 +308,13 @@
 			files = (
 			);
 			inputPaths = (
-				"${PROJECT_DIR}/../../backup-restore/main.go",
 			);
 			outputPaths = (
 				"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/kontabb-bkp",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"${PROJECT_DIR}/../../backup-restore\"\nOUT=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/kontabb-bkp\"\nmkdir -p \"$(dirname \"$OUT\")\"\nGOCACHE=\"${PROJECT_DIR}/../../.go-cache\" go build -C \"$SRC\" -o \"$OUT\" .\nchmod 755 \"$OUT\"\n";
+			shellScript = "set -e\nSRC=\"\"\nif [ -d \"${PROJECT_DIR}/../../Kontabb-backup-restore\" ]; then\n  SRC=\"${PROJECT_DIR}/../../Kontabb-backup-restore\"\nelif [ -d \"${PROJECT_DIR}/../../backup-restore\" ]; then\n  SRC=\"${PROJECT_DIR}/../../backup-restore\"\nfi\nOUT=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/kontabb-bkp\"\nmkdir -p \"$(dirname \"$OUT\")\"\nif [ -n \"$SRC\" ] && [ -f \"$SRC/bin/kontabb-bkp\" ]; then\n  cp \"$SRC/bin/kontabb-bkp\" \"$OUT\"\n  chmod 755 \"$OUT\"\nelif [ -n \"$SRC\" ] && command -v go >/dev/null 2>&1; then\n  GOCACHE=\"${PROJECT_DIR}/../../.go-cache\" go build -C \"$SRC\" -o \"$OUT\" .\n  chmod 755 \"$OUT\"\nelse\n  echo \"warning: PostgreSQL helper (kontabb-bkp) source or binary not found. Skipping helper embedding.\"\nfi\n";
 		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;

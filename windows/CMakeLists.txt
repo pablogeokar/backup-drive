@@ -87,6 +87,20 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Copy PostgreSQL backup helper if available
+set(HELPER_EXE_CANDIDATES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../Kontabb-backup-restore/bin/kontabb-bkp.exe"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Kontabb-backup-restore/bin/kontabb-bkp.exe"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../backup-restore/bin/kontabb-bkp.exe"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../backup-restore/bin/kontabb-bkp.exe"
+)
+foreach(helper_path ${HELPER_EXE_CANDIDATES})
+  if(EXISTS "${helper_path}")
+    install(FILES "${helper_path}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+    break()
+  endif()
+endforeach()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

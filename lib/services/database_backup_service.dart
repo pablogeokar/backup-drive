@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 enum DatabaseOperation { backup, restore, validate }
 
 class DatabaseBackupResult {
@@ -16,17 +18,39 @@ class DatabaseBackupResult {
 class DatabaseBackupService {
   Process? _process;
 
+  /// Obtém o caminho do binário auxiliar kontabb-bkp compatível com Windows e macOS.
   String get helperPath {
+    final customPath = Platform.environment['KONTABB_BKP_PATH'];
+    if (customPath != null && customPath.isNotEmpty && File(customPath).existsSync()) {
+      return customPath;
+    }
+
     final executableDir = File(Platform.resolvedExecutable).parent.path;
-    final candidates = <String>[
-      '$executableDir/kontabb-bkp',
-      '${Directory(executableDir).parent.path}/Resources/kontabb-bkp',
-      // Flutter macOS debug runs the Dart executable outside the app bundle.
-      '${Directory.current.path}/../backup-restore/bin/kontabb-bkp',
-      '${Directory.current.path}/backup-restore/bin/kontabb-bkp',
-    ];
+    final isWin = Platform.isWindows;
+    final exeNames = isWin
+        ? const ['kontabb-bkp.exe', 'kontabb-bkp']
+        : const ['kontabb-bkp', 'kontabb-bkp.exe'];
+
+    final candidates = <String>[];
+    for (final name in exeNames) {
+      // 1. Ao lado do executável principal (Windows release ou macOS Contents/MacOS)
+      candidates.add(p.join(executableDir, name));
+
+      // 2. macOS app bundle Resources ou MacOS
+      final appContentsDir = Directory(executableDir).parent.path;
+      candidates.add(p.join(appContentsDir, 'Resources', name));
+      candidates.add(p.join(appContentsDir, 'MacOS', name));
+
+      // 3. Estrutura do workspace em desenvolvimento
+      candidates.add(p.join(Directory.current.path, '..', 'Kontabb-backup-restore', 'bin', name));
+      candidates.add(p.join(Directory.current.path, '..', 'backup-restore', 'bin', name));
+      candidates.add(p.join(Directory.current.path, 'Kontabb-backup-restore', 'bin', name));
+      candidates.add(p.join(Directory.current.path, 'backup-restore', 'bin', name));
+      candidates.add(p.join(Directory.current.path, 'bin', name));
+    }
+
     for (final candidate in candidates) {
-      if (File(candidate).existsSync()) return candidate;
+      if (File(candidate).existsSync()) return p.normalize(candidate);
     }
     throw ProcessException(
       'kontabb-bkp',
@@ -47,16 +71,22 @@ class DatabaseBackupService {
     void Function(String line)? onLine,
   }) async {
     final envContents = await File(envFile).readAsString();
-    final databaseUrl = _readDatabaseUrl(envContents);
+    final databaseUrl = parseDatabaseUrl(envContents);
     if (databaseUrl == null || databaseUrl.isEmpty) {
       throw const ProcessException('kontabb-bkp', [], 'O arquivo .env não contém DATABASE_URL.', 2);
     }
     final args = <String>['-database-url-from-env', '-schema', schema];
     final temporaryOutput = operation == DatabaseOperation.backup
-        ? '${Directory.systemTemp.path}/kontabb-backup-${DateTime.now().microsecondsSinceEpoch}.sql.gz'
+        ? p.join(
+            Directory.systemTemp.path,
+            'kontabb-backup-${DateTime.now().microsecondsSinceEpoch}.sql.gz',
+          )
         : null;
     final temporaryInput = operation == DatabaseOperation.restore
-        ? '${Directory.systemTemp.path}/kontabb-restore-${DateTime.now().microsecondsSinceEpoch}${inputFile!.toLowerCase().endsWith('.gz') ? '.sql.gz' : '.sql'}'
+        ? p.join(
+            Directory.systemTemp.path,
+            'kontabb-restore-${DateTime.now().microsecondsSinceEpoch}${inputFile!.toLowerCase().endsWith('.gz') ? '.sql.gz' : '.sql'}',
+          )
         : null;
     if (temporaryInput != null) await File(inputFile!).copy(temporaryInput);
     switch (operation) {
@@ -97,7 +127,8 @@ class DatabaseBackupService {
     return DatabaseBackupResult(exitCode: code, output: lines.join('\n'));
   }
 
-  String? _readDatabaseUrl(String contents) {
+  /// Extrai o valor de DATABASE_URL a partir do conteúdo de um arquivo .env.
+  static String? parseDatabaseUrl(String contents) {
     for (final raw in const LineSplitter().convert(contents)) {
       final line = raw.trim();
       if (line.isEmpty || line.startsWith('#')) continue;
@@ -115,8 +146,12 @@ class DatabaseBackupService {
   Future<void> cancel() async {
     final process = _process;
     if (process == null) return;
-    process.kill(ProcessSignal.sigterm);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    process.kill(ProcessSignal.sigkill);
+    if (Platform.isWindows) {
+      process.kill();
+    } else {
+      process.kill(ProcessSignal.sigterm);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      process.kill(ProcessSignal.sigkill);
+    }
   }
 }

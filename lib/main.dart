@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'pages/home_page.dart';
@@ -12,6 +14,8 @@ class BackupDriveApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final defaultFont = Platform.isWindows ? 'Segoe UI' : null;
+
     return MaterialApp(
       title: 'Kontabb Backup Drive',
       debugShowCheckedModeBanner: false,
@@ -19,7 +23,7 @@ class BackupDriveApp extends StatelessWidget {
         colorSchemeSeed: const Color(0xFF0F62FE),
         useMaterial3: true,
         brightness: Brightness.light,
-        fontFamily: 'Segoe UI',
+        fontFamily: defaultFont,
         visualDensity: VisualDensity.compact,
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
@@ -34,7 +38,7 @@ class BackupDriveApp extends StatelessWidget {
         colorSchemeSeed: const Color(0xFF0F62FE),
         useMaterial3: true,
         brightness: Brightness.dark,
-        fontFamily: 'Segoe UI',
+        fontFamily: defaultFont,
         visualDensity: VisualDensity.compact,
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(

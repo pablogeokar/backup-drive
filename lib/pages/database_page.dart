@@ -31,6 +31,16 @@ class _DatabasePageState extends State<DatabasePage> {
     _loadPreferences();
   }
 
+  bool _isTemporaryPath(String? path) {
+    if (path == null) return false;
+    final lower = path.toLowerCase();
+    return lower.contains('/tmp/') ||
+        lower.contains(r'\temp\') ||
+        lower.contains(r'\tmp\') ||
+        lower.contains('/var/folders/') ||
+        (lower.contains('temp') && lower.endsWith('.gz'));
+  }
+
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -38,11 +48,7 @@ class _DatabasePageState extends State<DatabasePage> {
       _env.text = prefs.getString('database_env_path') ?? '';
       _schema.text = prefs.getString('database_schema') ?? 'public';
       final savedOutput = prefs.getString('database_output_path');
-      // Do not reuse paths created by the old file based picker; macOS maps
-      // those to the app sandbox temporary directory.
-      _output = savedOutput != null && (savedOutput.contains('/tmp/') || savedOutput.endsWith('/tmp/backup.sql.gz'))
-          ? null
-          : savedOutput;
+      _output = _isTemporaryPath(savedOutput) ? null : savedOutput;
       _input = prefs.getString('database_input_path');
       _dryRun = prefs.getBool('database_dry_run') ?? true;
       _noTruncate = prefs.getBool('database_no_truncate') ?? false;
@@ -70,11 +76,22 @@ class _DatabasePageState extends State<DatabasePage> {
   Future<void> _pickEnv() async {
     String? path;
     if (Platform.isMacOS) {
-      path = await const MethodChannel(
-        'backup_drive/env_picker',
-      ).invokeMethod<String>('pickEnv');
+      try {
+        path = await const MethodChannel(
+          'backup_drive/env_picker',
+        ).invokeMethod<String>('pickEnv');
+      } on MissingPluginException catch (_) {
+        final r = await FilePicker.pickFiles(
+          type: FileType.any,
+          lockParentWindow: true,
+        );
+        path = r?.files.single.path;
+      }
     } else {
-      final r = await FilePicker.pickFiles(type: FileType.any);
+      final r = await FilePicker.pickFiles(
+        type: FileType.any,
+        lockParentWindow: true,
+      );
       path = r?.files.single.path;
     }
     if (path != null) {
@@ -95,7 +112,10 @@ class _DatabasePageState extends State<DatabasePage> {
   }
 
   Future<void> _pickInput() async {
-    final r = await FilePicker.pickFiles(type: FileType.any);
+    final r = await FilePicker.pickFiles(
+      type: FileType.any,
+      lockParentWindow: true,
+    );
     if (r?.files.single.path != null) {
       setState(() => _input = r!.files.single.path!);
       await _savePreferences();

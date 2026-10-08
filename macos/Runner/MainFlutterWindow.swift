@@ -71,7 +71,6 @@ class MainFlutterWindow: NSWindow {
           panel.canChooseFiles = true
           panel.canChooseDirectories = false
           panel.allowsMultipleSelection = false
-          panel.allowedFileTypes = ["sql", "gz"]
           panel.title = "Selecione um backup PostgreSQL"
           if panel.runModal() == .OK, let url = panel.url {
             result(try MainFlutterWindow.scopedResult(for: url))

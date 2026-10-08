@@ -37,6 +37,7 @@ class _DatabasePageState extends State<DatabasePage> {
   bool _hideDatabaseUrl = true;
   bool _connectionSaved = false;
   bool _showConnectionForm = true;
+  bool _outputAuthorized = true;
 
   @override
   void initState() {
@@ -74,18 +75,26 @@ class _DatabasePageState extends State<DatabasePage> {
     }
     final documents = await getApplicationDocumentsDirectory();
     final defaultOutput = p.join(documents.path, 'KontabbBackup', 'PostgreSQL');
+    var outputAuthorized = true;
     if (Platform.isMacOS && outputBookmark != null) {
       final restored = await _restoreBookmark(outputBookmark);
-      outputDirectory = restored?.path ?? defaultOutput;
-      outputBookmark = restored?.bookmark;
+      if (restored == null) {
+        outputAuthorized = false;
+        outputBookmark = null;
+      } else {
+        outputDirectory = restored.path;
+        outputBookmark = restored.bookmark;
+      }
     } else if (Platform.isMacOS &&
         outputDirectory != null &&
         !p.isWithin(documents.path, outputDirectory)) {
       // Caminhos externos migrados não possuem autorização persistente.
-      outputDirectory = defaultOutput;
+      outputAuthorized = false;
     }
     if (outputDirectory == null || _isTemporaryPath(outputDirectory)) {
       outputDirectory = defaultOutput;
+      outputBookmark = null;
+      outputAuthorized = true;
     }
     var savedInput = await database.getString('database_input_path');
     final inputBookmark = await database.getString(
@@ -123,6 +132,7 @@ class _DatabasePageState extends State<DatabasePage> {
       _noTruncate = noTruncate ?? false;
       _connectionSaved = connection != null;
       _showConnectionForm = connection == null;
+      _outputAuthorized = outputAuthorized;
       _loading = false;
     });
   }
@@ -194,7 +204,10 @@ class _DatabasePageState extends State<DatabasePage> {
     if (Platform.isMacOS) {
       final selection = await _pickScoped('pickDirectory');
       if (selection == null) return;
-      setState(() => _outputDirectory = selection.path);
+      setState(() {
+        _outputDirectory = selection.path;
+        _outputAuthorized = true;
+      });
       await AppDatabase.instance.setString(
         'database_output_directory',
         selection.path,
@@ -291,6 +304,13 @@ class _DatabasePageState extends State<DatabasePage> {
 
   Future<void> _run(DatabaseOperation operation) async {
     if (!await _saveConnection(showMessage: false)) return;
+    if (operation == DatabaseOperation.backup && !_outputAuthorized) {
+      _message(
+        'Autorize novamente a pasta de destino para o macOS memorizar o acesso.',
+      );
+      await _pickOutputDirectory();
+      if (!_outputAuthorized) return;
+    }
     if (operation == DatabaseOperation.restore && _input == null) {
       return _message('Selecione o backup que será restaurado.');
     }
@@ -622,6 +642,12 @@ class _DatabasePageState extends State<DatabasePage> {
             leading: const Icon(Icons.folder_outlined),
             title: const Text('Pasta de destino'),
             subtitle: Text(_outputDirectory ?? 'Não selecionada'),
+            titleTextStyle: TextStyle(
+              color: _outputAuthorized
+                  ? colorScheme.onSurface
+                  : colorScheme.error,
+              fontWeight: FontWeight.w600,
+            ),
             trailing: IconButton(
               onPressed: _busy ? null : _pickOutputDirectory,
               icon: const Icon(Icons.edit_outlined),

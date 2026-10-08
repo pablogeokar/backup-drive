@@ -69,6 +69,8 @@ Na primeira execução após a atualização, o aplicativo migra automaticamente
 
 Depois da migração, a operação não depende mais do `.env`. O arquivo SQLite fica na pasta de suporte da aplicação do usuário, fora das pastas de backup. No macOS e em outros sistemas Unix, o diretório recebe permissão `0700` e o arquivo principal `0600`. As credenciais são locais e não são enviadas a serviços externos pelo aplicativo.
 
+No macOS, a autorização de pastas externas também é persistida no SQLite por meio de um *security-scoped bookmark*. Instalações atualizadas precisam autorizar novamente a pasta de backup uma única vez; nas execuções seguintes, o acesso é restaurado automaticamente.
+
 ---
 
 ## Resolução de Binários do Helper PostgreSQL

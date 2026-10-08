@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -19,6 +20,7 @@ class SyncProgress {
   final String currentFile;
   final String? errorMessage;
   final DateTime? lastSyncTime;
+  final bool resumedFromCheckpoint;
 
   const SyncProgress({
     this.status = SyncStatus.idle,
@@ -30,6 +32,7 @@ class SyncProgress {
     this.currentFile = '',
     this.errorMessage,
     this.lastSyncTime,
+    this.resumedFromCheckpoint = false,
   });
 
   double get progressPercent =>
@@ -45,6 +48,7 @@ class SyncProgress {
     String? currentFile,
     String? errorMessage,
     DateTime? lastSyncTime,
+    bool? resumedFromCheckpoint,
   }) {
     return SyncProgress(
       status: status ?? this.status,
@@ -56,6 +60,8 @@ class SyncProgress {
       currentFile: currentFile ?? this.currentFile,
       errorMessage: errorMessage ?? this.errorMessage,
       lastSyncTime: lastSyncTime ?? this.lastSyncTime,
+      resumedFromCheckpoint:
+          resumedFromCheckpoint ?? this.resumedFromCheckpoint,
     );
   }
 }
@@ -71,6 +77,34 @@ class _RemoteObject {
     required this.size,
     this.lastModified,
   });
+}
+
+class _SyncCheckpoint {
+  const _SyncCheckpoint({
+    required this.lastProcessedKey,
+    required this.startedAt,
+  });
+
+  final String lastProcessedKey;
+  final DateTime startedAt;
+
+  Map<String, Object> toJson() => {
+    'lastProcessedKey': lastProcessedKey,
+    'startedAt': startedAt.toIso8601String(),
+  };
+
+  static _SyncCheckpoint? fromJson(String? value) {
+    if (value == null) return null;
+    try {
+      final json = jsonDecode(value) as Map<String, dynamic>;
+      final key = json['lastProcessedKey'] as String?;
+      final startedAt = DateTime.tryParse(json['startedAt'] as String? ?? '');
+      if (key == null || key.isEmpty || startedAt == null) return null;
+      return _SyncCheckpoint(lastProcessedKey: key, startedAt: startedAt);
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// Serviço principal de sincronização R2 → disco local.
@@ -102,21 +136,36 @@ class SyncService {
     _cancelRequested = true;
   }
 
-  /// Executa a sincronização completa (incremental).
+  /// Executa a sincronização completa (incremental) com retomada persistente.
   ///
   /// Para cada objeto no bucket:
   /// 1. Verifica se já existe localmente.
   /// 2. Se existe, compara o tamanho e data de modificação.
   /// 3. Se diferente ou não existe, faz download.
+  /// 4. Persiste checkpoints periódicos para retomar após interrupções.
+  ///
+  /// Uma execução concluída ainda faz uma nova listagem no próximo ciclo. A
+  /// API S3 não oferece um cursor de "alterações desde a última sincronização";
+  /// ignorar permanentemente chaves anteriores perderia arquivos atualizados.
   Future<void> sync() async {
     _cancelRequested = false;
-    _progress = const SyncProgress(status: SyncStatus.listing);
+    final checkpoint = await _loadCheckpoint();
+    final resumed = checkpoint != null;
+    _progress = SyncProgress(
+      status: SyncStatus.listing,
+      resumedFromCheckpoint: resumed,
+      currentFile: resumed
+          ? 'Retomando após ${checkpoint.lastProcessedKey}'
+          : '',
+    );
     _notifyProgress();
 
     try {
       // Fase 1: Listar todos os objetos
       final objects = <_RemoteObject>[];
-      await for (final chunk in _client.listAllObjects()) {
+      await for (final chunk in _client.listAllObjects(
+        startAfter: checkpoint?.lastProcessedKey,
+      )) {
         if (_cancelRequested) {
           _progress = _progress.copyWith(
             status: SyncStatus.idle,
@@ -149,9 +198,16 @@ class SyncService {
       int downloaded = 0;
       int skipped = 0;
       int errors = 0;
+      int sinceLastCheckpoint = 0;
+      String? lastSafeKey = checkpoint?.lastProcessedKey;
+      bool checkpointBlockedByError = false;
+      final startedAt = checkpoint?.startedAt ?? DateTime.now();
 
       for (final obj in objects) {
         if (_cancelRequested) {
+          if (lastSafeKey != null) {
+            await _saveCheckpoint(lastSafeKey, startedAt);
+          }
           _progress = _progress.copyWith(
             status: SyncStatus.idle,
             errorMessage: 'Sync cancelado pelo usuário.',
@@ -172,8 +228,17 @@ class SyncService {
           } else {
             skipped++;
           }
+          if (!checkpointBlockedByError) {
+            lastSafeKey = obj.key;
+            sinceLastCheckpoint++;
+            if (sinceLastCheckpoint >= 25) {
+              await _saveCheckpoint(lastSafeKey, startedAt);
+              sinceLastCheckpoint = 0;
+            }
+          }
         } catch (e) {
           errors++;
+          checkpointBlockedByError = true;
           // Guardar último erro para diagnóstico
           _progress = _progress.copyWith(errorMessage: '[${obj.key}] $e');
         }
@@ -185,6 +250,12 @@ class SyncService {
           errorCount: errors,
         );
         _notifyProgress();
+      }
+
+      if (errors == 0) {
+        await _clearCheckpoint();
+      } else if (lastSafeKey != null) {
+        await _saveCheckpoint(lastSafeKey, startedAt);
       }
 
       // Salvar timestamp do último sync
@@ -255,6 +326,32 @@ class SyncService {
     if (stored == null) return null;
     return DateTime.tryParse(stored);
   }
+
+  String get _checkpointKey {
+    final identity =
+        '${_client.config.bucketName}|${p.normalize(_localBasePath)}';
+    final encoded = base64Url.encode(utf8.encode(identity));
+    return 'r2_sync_checkpoint.$encoded';
+  }
+
+  Future<_SyncCheckpoint?> _loadCheckpoint() async {
+    final value = await AppDatabase.instance.getString(_checkpointKey);
+    return _SyncCheckpoint.fromJson(value);
+  }
+
+  Future<void> _saveCheckpoint(String lastProcessedKey, DateTime startedAt) {
+    final checkpoint = _SyncCheckpoint(
+      lastProcessedKey: lastProcessedKey,
+      startedAt: startedAt,
+    );
+    return AppDatabase.instance.setString(
+      _checkpointKey,
+      jsonEncode(checkpoint.toJson()),
+    );
+  }
+
+  Future<void> _clearCheckpoint() =>
+      AppDatabase.instance.setString(_checkpointKey, null);
 
   void _notifyProgress() {
     onProgressChanged?.call(_progress);

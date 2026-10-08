@@ -30,12 +30,19 @@ class R2Client {
     }
   }
 
-  /// Lista todos os objetos no bucket, retornando metadados completos.
-  Stream<ListObjectsResult> listAllObjects({String prefix = ''}) {
-    return _minio.listObjects(
+  /// Lista objetos em ordem lexicográfica usando a API S3 ListObjectsV2.
+  ///
+  /// [startAfter] permite retomar uma sincronização interrompida sem reler as
+  /// páginas que já foram processadas na mesma execução lógica.
+  Stream<ListObjectsResult> listAllObjects({
+    String prefix = '',
+    String? startAfter,
+  }) {
+    return _minio.listObjectsV2(
       config.bucketName,
       prefix: prefix,
       recursive: true,
+      startAfter: startAfter,
     );
   }
 

@@ -7,6 +7,16 @@ Aplicativo desktop Flutter para gerenciamento de backups da Kontabb:
 
 Compatível com **Windows** e **macOS**.
 
+### Sincronização inteligente do R2
+
+- Arquivos locais com o mesmo tamanho e data remota continuam sendo ignorados.
+- Durante o download, o aplicativo grava no SQLite um checkpoint a cada 25 objetos.
+- Se o app for fechado, a rede cair ou a operação for interrompida, a próxima execução usa `ListObjectsV2` com `start-after` e continua do último objeto confirmado.
+- Checkpoints são separados por bucket e pasta local, evitando retomar uma operação no destino errado.
+- Depois que a retomada termina, o checkpoint é removido e o ciclo seguinte volta a verificar o bucket completo para não perder objetos antigos que tenham sido alterados.
+
+Uma sincronização baseada exclusivamente em mudanças, sem nenhuma listagem periódica, exige notificações de eventos do R2 conectadas a uma Cloudflare Queue/Worker. O modo local mantém a verificação completa após ciclos concluídos para garantir consistência sem depender de infraestrutura adicional.
+
 ---
 
 ## Requisitos

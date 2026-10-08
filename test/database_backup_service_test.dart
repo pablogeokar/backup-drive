@@ -91,5 +91,20 @@ SOME_VAR=123
       );
       expect(progress.progressPercent, 0.5);
     });
+
+    test('SyncProgress preserves checkpoint resume state', () {
+      const progress = SyncProgress(
+        status: SyncStatus.listing,
+        resumedFromCheckpoint: true,
+      );
+
+      final downloading = progress.copyWith(
+        status: SyncStatus.downloading,
+        totalObjects: 10,
+      );
+
+      expect(downloading.resumedFromCheckpoint, isTrue);
+      expect(downloading.totalObjects, 10);
+    });
   });
 }

@@ -729,8 +729,10 @@ class _HomePageState extends State<HomePage>
                 const SizedBox(height: 4),
                 Text(
                   _isSyncing
-                      ? 'Baixando arquivos do bucket ${_selectedEnv == 'production' ? 'documents' : 'teste'}...'
-                      : 'Baixar todos os objetos do bucket para a pasta local.',
+                      ? _progress.resumedFromCheckpoint
+                            ? 'Retomando do último ponto confirmado...'
+                            : 'Baixando arquivos do bucket ${_selectedEnv == 'production' ? 'documents' : 'teste'}...'
+                      : 'Sincronização incremental com retomada automática.',
                   style: TextStyle(
                     fontSize: 12,
                     color: colorScheme.onSurfaceVariant,
@@ -1030,7 +1032,9 @@ class _HomePageState extends State<HomePage>
   String _statusTitle() {
     switch (_progress.status) {
       case SyncStatus.listing:
-        return 'Listando objetos...';
+        return _progress.resumedFromCheckpoint
+            ? 'Retomando sincronização...'
+            : 'Listando objetos...';
       case SyncStatus.downloading:
         return '${_progress.processedObjects} de ${_progress.totalObjects} objetos';
       case SyncStatus.completed:
@@ -1045,11 +1049,15 @@ class _HomePageState extends State<HomePage>
   String _statusSubtitle() {
     switch (_progress.status) {
       case SyncStatus.listing:
-        return 'Consultando bucket R2...';
+        return _progress.resumedFromCheckpoint
+            ? 'Pulando páginas já concluídas no R2...'
+            : 'Consultando bucket R2...';
       case SyncStatus.downloading:
         return 'Baixando: ${_progress.downloadedObjects} | Ignorados: ${_progress.skippedObjects}';
       case SyncStatus.completed:
-        return 'Todos os arquivos foram sincronizados';
+        return _progress.resumedFromCheckpoint
+            ? 'Retomada concluída; o próximo ciclo fará uma verificação completa'
+            : 'Todos os arquivos foram sincronizados';
       case SyncStatus.error:
         return 'Ocorreu um erro durante o processo';
       case SyncStatus.idle:

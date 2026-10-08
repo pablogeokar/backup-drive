@@ -21,7 +21,9 @@ class DatabaseBackupService {
   /// Obtém o caminho do binário auxiliar kontabb-bkp compatível com Windows e macOS.
   String get helperPath {
     final customPath = Platform.environment['KONTABB_BKP_PATH'];
-    if (customPath != null && customPath.isNotEmpty && File(customPath).existsSync()) {
+    if (customPath != null &&
+        customPath.isNotEmpty &&
+        File(customPath).existsSync()) {
       return customPath;
     }
 
@@ -42,10 +44,24 @@ class DatabaseBackupService {
       candidates.add(p.join(appContentsDir, 'MacOS', name));
 
       // 3. Estrutura do workspace em desenvolvimento
-      candidates.add(p.join(Directory.current.path, '..', 'Kontabb-backup-restore', 'bin', name));
-      candidates.add(p.join(Directory.current.path, '..', 'backup-restore', 'bin', name));
-      candidates.add(p.join(Directory.current.path, 'Kontabb-backup-restore', 'bin', name));
-      candidates.add(p.join(Directory.current.path, 'backup-restore', 'bin', name));
+      candidates.add(
+        p.join(
+          Directory.current.path,
+          '..',
+          'Kontabb-backup-restore',
+          'bin',
+          name,
+        ),
+      );
+      candidates.add(
+        p.join(Directory.current.path, '..', 'backup-restore', 'bin', name),
+      );
+      candidates.add(
+        p.join(Directory.current.path, 'Kontabb-backup-restore', 'bin', name),
+      );
+      candidates.add(
+        p.join(Directory.current.path, 'backup-restore', 'bin', name),
+      );
       candidates.add(p.join(Directory.current.path, 'bin', name));
     }
 
@@ -62,7 +78,7 @@ class DatabaseBackupService {
 
   Future<DatabaseBackupResult> run({
     required DatabaseOperation operation,
-    required String envFile,
+    required String databaseUrl,
     String? outputFile,
     String? inputFile,
     bool dryRun = false,
@@ -70,10 +86,13 @@ class DatabaseBackupService {
     String schema = 'public',
     void Function(String line)? onLine,
   }) async {
-    final envContents = await File(envFile).readAsString();
-    final databaseUrl = parseDatabaseUrl(envContents);
-    if (databaseUrl == null || databaseUrl.isEmpty) {
-      throw const ProcessException('kontabb-bkp', [], 'O arquivo .env não contém DATABASE_URL.', 2);
+    if (databaseUrl.isEmpty) {
+      throw const ProcessException(
+        'kontabb-bkp',
+        [],
+        'Informe os dados de conexão do PostgreSQL.',
+        2,
+      );
     }
     final args = <String>['-database-url-from-env', '-schema', schema];
     final temporaryOutput = operation == DatabaseOperation.backup
@@ -101,7 +120,12 @@ class DatabaseBackupService {
     }
     final environment = Map<String, String>.from(Platform.environment)
       ..['DATABASE_URL'] = databaseUrl;
-    final process = await Process.start(helperPath, args, runInShell: false, environment: environment);
+    final process = await Process.start(
+      helperPath,
+      args,
+      runInShell: false,
+      environment: environment,
+    );
     _process = process;
     final lines = <String>[];
     Future<void> collect(Stream<List<int>> stream) async {
@@ -119,10 +143,14 @@ class DatabaseBackupService {
       await File(temporaryOutput).copy(outputFile!);
     }
     if (temporaryOutput != null) {
-      try { await File(temporaryOutput).delete(); } catch (_) {}
+      try {
+        await File(temporaryOutput).delete();
+      } catch (_) {}
     }
     if (temporaryInput != null) {
-      try { await File(temporaryInput).delete(); } catch (_) {}
+      try {
+        await File(temporaryInput).delete();
+      } catch (_) {}
     }
     return DatabaseBackupResult(exitCode: code, output: lines.join('\n'));
   }
@@ -135,7 +163,9 @@ class DatabaseBackupService {
       final match = RegExp(r'^DATABASE_URL\s*=\s*(.*)$').firstMatch(line);
       if (match == null) continue;
       var value = match.group(1)!.trim();
-      if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+      if (value.length >= 2 &&
+          ((value.startsWith('"') && value.endsWith('"')) ||
+              (value.startsWith("'") && value.endsWith("'")))) {
         value = value.substring(1, value.length - 1);
       }
       return value;

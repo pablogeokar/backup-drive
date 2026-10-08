@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'pages/home_page.dart';
 import 'pages/database_page.dart';
+import 'services/app_database.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppDatabase.instance.initialize();
   runApp(const BackupDriveApp());
 }
 

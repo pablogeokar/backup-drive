@@ -1,8 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'app_database.dart';
 import 'r2_client.dart';
 import 'r2_config.dart';
 
@@ -244,14 +243,15 @@ class SyncService {
 
   /// Salva o timestamp da última sincronização.
   Future<void> _saveLastSyncTime() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('last_sync_time', DateTime.now().toIso8601String());
+    await AppDatabase.instance.setString(
+      'last_sync_time',
+      DateTime.now().toIso8601String(),
+    );
   }
 
   /// Carrega o timestamp da última sincronização.
   Future<DateTime?> getLastSyncTime() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString('last_sync_time');
+    final stored = await AppDatabase.instance.getString('last_sync_time');
     if (stored == null) return null;
     return DateTime.tryParse(stored);
   }

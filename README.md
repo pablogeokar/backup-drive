@@ -3,6 +3,7 @@
 Aplicativo desktop Flutter para gerenciamento de backups da Kontabb:
 1. **Cloudflare R2**: Backup local completo e sincronização incremental de buckets (`teste` e `documents`).
 2. **PostgreSQL**: Backup, restauração com validação de integridade e simulação (*dry-run*) utilizando o utilitário nativo embarcado `kontabb-bkp`.
+3. **Configuração local**: Conexões, caminhos e preferências são mantidos em um banco SQLite interno; o `.env` é necessário apenas se o usuário optar por importá-lo uma vez.
 
 Compatível com **Windows** e **macOS**.
 
@@ -51,11 +52,22 @@ flutter build macos
 
 - `lib/main.dart`: Ponto de entrada, temas e fontes nativas (`Segoe UI` no Windows, `SF Pro` no macOS).
 - `lib/pages/home_page.dart`: Interface de sincronização com o Cloudflare R2.
-- `lib/pages/database_page.dart`: Interface para backup/restore PostgreSQL com suporte a seleção de arquivos ocultos (`.env`).
+- `lib/pages/database_page.dart`: Interface para backup/restore PostgreSQL com conexão salva e importação opcional de `.env`.
+- `lib/services/app_database.dart`: Banco SQLite interno, migração das preferências antigas e repositório de conexões/configurações.
 - `lib/services/database_backup_service.dart`: Gerenciamento de processos e localização do binário auxiliar `kontabb-bkp` no Windows e macOS.
 - `lib/services/r2_client.dart` & `sync_service.dart`: Cliente S3 MinIO e motor de sincronização incremental.
 - `windows/`: Configuração de build CMake e Runner Windows.
 - `macos/`: Configuração de projeto Xcode, Entitlements e Runner macOS.
+
+## Configurações locais
+
+Na primeira execução após a atualização, o aplicativo migra automaticamente:
+
+- a conexão PostgreSQL do `.env` anteriormente selecionado, quando o arquivo ainda estiver acessível;
+- pasta de backup, ambiente R2, último sync e preferências de backup/restauração;
+- caminhos de entrada e saída usados recentemente.
+
+Depois da migração, a operação não depende mais do `.env`. O arquivo SQLite fica na pasta de suporte da aplicação do usuário, fora das pastas de backup. No macOS e em outros sistemas Unix, o diretório recebe permissão `0700` e o arquivo principal `0600`. As credenciais são locais e não são enviadas a serviços externos pelo aplicativo.
 
 ---
 

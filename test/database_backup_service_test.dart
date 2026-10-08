@@ -48,17 +48,20 @@ SOME_VAR=123
   });
 
   group('DatabaseBackupService - Helper Path Resolution', () {
-    test('resolves custom path when KONTABB_BKP_PATH points to existing file', () {
-      // Create a temporary dummy executable
-      final tempDir = Directory.systemTemp.createTempSync('helper_test');
-      final dummyFile = File('${tempDir.path}/custom-bkp-helper')
-        ..writeAsStringSync('dummy');
+    test(
+      'resolves custom path when KONTABB_BKP_PATH points to existing file',
+      () {
+        // Create a temporary dummy executable
+        final tempDir = Directory.systemTemp.createTempSync('helper_test');
+        final dummyFile = File('${tempDir.path}/custom-bkp-helper')
+          ..writeAsStringSync('dummy');
 
-      // Test when env is set by passing or checking helper lookup
-      expect(dummyFile.existsSync(), isTrue);
+        // Test when env is set by passing or checking helper lookup
+        expect(dummyFile.existsSync(), isTrue);
 
-      tempDir.deleteSync(recursive: true);
-    });
+        tempDir.deleteSync(recursive: true);
+      },
+    );
 
     test('can instantiate service and check default candidates logic', () {
       final service = DatabaseBackupService();

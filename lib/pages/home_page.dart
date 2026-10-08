@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/app_database.dart';
 import '../services/r2_config.dart';
 import '../services/sync_service.dart';
 
@@ -40,9 +40,8 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _initService() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedPath = prefs.getString('backup_path');
-    final savedEnv = prefs.getString('selected_env');
+    final savedPath = await AppDatabase.instance.getString('backup_path');
+    final savedEnv = await AppDatabase.instance.getString('selected_env');
 
     final docsDir = await getApplicationDocumentsDirectory();
     final defaultPath = p.join(docsDir.path, 'KontabbBackup');
@@ -126,9 +125,8 @@ class _HomePageState extends State<HomePage>
       _progress.status == SyncStatus.downloading;
 
   Future<void> _savePreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('backup_path', _localPath);
-    await prefs.setString('selected_env', _selectedEnv);
+    await AppDatabase.instance.setString('backup_path', _localPath);
+    await AppDatabase.instance.setString('selected_env', _selectedEnv);
   }
 
   @override

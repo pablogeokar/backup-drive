@@ -13,7 +13,7 @@ class DatabaseBackupResult {
   bool get succeeded => exitCode == 0;
 }
 
-/// Runs the signed helper shipped beside the desktop executable. Arguments are
+/// Runs the helper shipped beside the desktop executable. Arguments are
 /// passed as a list so paths and connection settings never go through a shell.
 class DatabaseBackupService {
   Process? _process;

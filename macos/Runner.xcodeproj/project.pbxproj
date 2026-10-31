@@ -304,6 +304,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		BKPDB001000000000000001 /* Embed PostgreSQL helper */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

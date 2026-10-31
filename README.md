@@ -38,8 +38,8 @@ flutter pub get
 # Executar em modo Debug
 flutter run -d windows
 
-# Gerar executável de Release
-flutter build windows
+# Gerar e conferir o pacote local com o helper v1.2 (no Windows x64)
+.\scripts\build-windows-release.ps1
 ```
 *O executável `kontabb-bkp.exe` é automaticamente copiado para a pasta de saída do build pelo CMake.*
 
@@ -51,13 +51,20 @@ flutter pub get
 # Executar em modo Debug
 flutter run -d macos
 
-# Gerar bundle .app de Release
-flutter build macos
+# Gerar e conferir o pacote local universal com o helper v1.2
+bash scripts/build-macos-release.sh
 ```
 *O binário `kontabb-bkp` é automaticamente embarcado no diretório `Contents/MacOS/` do App Bundle pelo Xcode.*
 
-Antes de gerar o app, recompile o helper do projeto `backup-restore/` e confirme
-que seu cabeçalho mostra `KONTABB v1.2`. A opção de restauração para tabelas
+Os scripts de release recompilam o helper do projeto irmão `backup-restore/`,
+conferem `KONTABB v1.2` e a opção `skip-missing-empty-tables` no binário
+embarcado, e criam arquivos ZIP locais em `build/release/`. No macOS o helper
+é universal (Apple Silicon e Intel), como o aplicativo. O script Windows deve
+ser executado em um host Windows com Visual Studio instalado; o binário Go
+para Windows sozinho não constitui um pacote do aplicativo validado. Os ZIPs
+locais **não têm assinatura de distribuição nem notarização**: assine, notarize quando
+aplicável e homologue a instalação em máquinas de cada plataforma antes de
+distribuir aos operadores. A opção de restauração para tabelas
 antigas vazias ausentes depende dessa versão. O campo correspondente na tela
 PostgreSQL é opcional e exige os nomes exatos separados por vírgula; qualquer
 linha encontrada no backup para uma dessas tabelas faz o restore abortar e

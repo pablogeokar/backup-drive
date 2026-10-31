@@ -22,7 +22,7 @@ Uma sincronização baseada exclusivamente em mudanças, sem nenhuma listagem pe
 ## Requisitos
 
 - **Flutter SDK**: `>= 3.11.5`
-- **Go**: `>= 1.21` (opcional, apenas para recompilar o helper PostgreSQL `kontabb-bkp`)
+- **Go**: `>= 1.25.6` (opcional, apenas para recompilar o helper PostgreSQL `kontabb-bkp`)
 - **Windows**: Visual Studio 2022 com suporte a Desktop C++
 - **macOS**: Xcode 15+ e CocoaPods
 
@@ -55,6 +55,14 @@ flutter run -d macos
 flutter build macos
 ```
 *O binário `kontabb-bkp` é automaticamente embarcado no diretório `Contents/MacOS/` do App Bundle pelo Xcode.*
+
+Antes de gerar o app, recompile o helper do projeto `backup-restore/` e confirme
+que seu cabeçalho mostra `KONTABB v1.2`. A opção de restauração para tabelas
+antigas vazias ausentes depende dessa versão. O campo correspondente na tela
+PostgreSQL é opcional e exige os nomes exatos separados por vírgula; qualquer
+linha encontrada no backup para uma dessas tabelas faz o restore abortar e
+reverter a transação. Teste primeiro com **Simular restauração** em um banco
+isolado. A interface não altera bancos automaticamente.
 
 ---
 

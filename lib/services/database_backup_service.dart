@@ -84,6 +84,7 @@ class DatabaseBackupService {
     bool dryRun = false,
     bool noTruncate = false,
     String schema = 'public',
+    List<String> skipMissingEmptyTables = const [],
     void Function(String line)? onLine,
   }) async {
     if (databaseUrl.isEmpty) {
@@ -115,6 +116,12 @@ class DatabaseBackupService {
         args.addAll(['-mode', 'restore', '-input', temporaryInput!]);
         if (dryRun) args.add('-dry-run');
         if (noTruncate) args.add('-no-truncate');
+        if (skipMissingEmptyTables.isNotEmpty) {
+          args.addAll([
+            '-skip-missing-empty-tables',
+            skipMissingEmptyTables.join(','),
+          ]);
+        }
       case DatabaseOperation.validate:
         args.add('-validate');
     }

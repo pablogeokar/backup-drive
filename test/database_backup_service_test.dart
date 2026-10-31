@@ -69,6 +69,40 @@ SOME_VAR=123
     });
   });
 
+  test(
+    'passes the explicit empty-table compatibility list to restore',
+    () async {
+      if (Platform.isWindows) return;
+      final directory = await Directory.systemTemp.createTemp('backup-helper-');
+      addTearDown(() => directory.delete(recursive: true));
+      final helper = File('${directory.path}/helper.sh');
+      await helper.writeAsString('#!/bin/sh\nprintf "ARG:%s\\n" "\$@"\n');
+      final chmod = await Process.run('chmod', ['+x', helper.path]);
+      expect(chmod.exitCode, 0);
+      final input = File('${directory.path}/backup.sql');
+      await input.writeAsString('');
+      final service = _TestBackupService(helper.path);
+
+      final result = await service.run(
+        operation: DatabaseOperation.restore,
+        databaseUrl: 'postgresql://user:pass@localhost/test',
+        inputFile: input.path,
+        dryRun: true,
+        skipMissingEmptyTables: const [
+          'sped_contabilistas',
+          'fiscal_lancamentos',
+        ],
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(result.output, contains('ARG:-skip-missing-empty-tables'));
+      expect(
+        result.output,
+        contains('ARG:sped_contabilistas,fiscal_lancamentos'),
+      );
+    },
+  );
+
   group('SyncProgress and R2Config', () {
     test('R2Config returns correct endpoint', () {
       expect(
@@ -107,4 +141,13 @@ SOME_VAR=123
       expect(downloading.totalObjects, 10);
     });
   });
+}
+
+class _TestBackupService extends DatabaseBackupService {
+  _TestBackupService(this.path);
+
+  final String path;
+
+  @override
+  String get helperPath => path;
 }

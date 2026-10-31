@@ -26,6 +26,7 @@ class _DatabasePageState extends State<DatabasePage> {
   final _connectionName = TextEditingController(text: 'PostgreSQL principal');
   final _databaseUrl = TextEditingController();
   final _schema = TextEditingController(text: 'public');
+  final _skipMissingEmptyTables = TextEditingController();
 
   String? _outputDirectory;
   String? _input;
@@ -314,6 +315,17 @@ class _DatabasePageState extends State<DatabasePage> {
     if (operation == DatabaseOperation.restore && _input == null) {
       return _message('Selecione o backup que será restaurado.');
     }
+    final skipInput = _skipMissingEmptyTables.text.trim();
+    if (operation == DatabaseOperation.restore &&
+        skipInput.isNotEmpty &&
+        !RegExp(
+          r'^[a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*$',
+        ).hasMatch(skipInput)) {
+      return _message('Informe apenas nomes de tabelas separados por vírgula.');
+    }
+    final skipMissingEmptyTables = skipInput.isEmpty
+        ? const <String>[]
+        : skipInput.split(',').map((name) => name.trim()).toSet().toList();
     if (operation == DatabaseOperation.restore && !_dryRun) {
       final confirmed = await _confirmRestore();
       if (!confirmed) return;
@@ -338,6 +350,9 @@ class _DatabasePageState extends State<DatabasePage> {
         dryRun: _dryRun,
         noTruncate: _noTruncate,
         schema: _schema.text.trim().isEmpty ? 'public' : _schema.text.trim(),
+        skipMissingEmptyTables: operation == DatabaseOperation.restore
+            ? skipMissingEmptyTables
+            : const [],
         onLine: (line) {
           if (mounted) setState(() => _log += '$line\n');
         },
@@ -410,6 +425,7 @@ class _DatabasePageState extends State<DatabasePage> {
     _databaseUrl.dispose();
     _connectionName.dispose();
     _schema.dispose();
+    _skipMissingEmptyTables.dispose();
     super.dispose();
   }
 
@@ -721,6 +737,16 @@ class _DatabasePageState extends State<DatabasePage> {
                     _saveOperationPreferences();
                   },
             title: const Text('Não truncar tabelas'),
+          ),
+          TextField(
+            controller: _skipMissingEmptyTables,
+            enabled: !_busy,
+            decoration: const InputDecoration(
+              labelText: 'Tabelas antigas vazias ausentes',
+              helperText:
+                  'Opcional. Separe nomes por vírgula; qualquer linha no backup aborta o restore.',
+              helperMaxLines: 2,
+            ),
           ),
           const SizedBox(height: 8),
           SizedBox(

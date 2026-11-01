@@ -70,7 +70,12 @@ antigas vazias ausentes depende dessa versão. O campo correspondente na tela
 PostgreSQL é opcional e exige os nomes exatos separados por vírgula; qualquer
 linha encontrada no backup para uma dessas tabelas faz o restore abortar e
 reverter a transação. Teste primeiro com **Simular restauração** em um banco
-isolado. A interface não altera bancos automaticamente.
+isolado. Para o backup anterior à migration `0004` da API, ao restaurar no
+schema novo de 54 tabelas, informe exatamente
+`sped_contabilistas,fiscal_lancamentos,fiscal_perfis_vigencia` nesse campo.
+Em backups novos de 54 tabelas, deixe o campo vazio. O procedimento completo
+está em `../api/docs/database-rebuild.md`. A interface não altera bancos
+automaticamente.
 
 Durante backup e restauração, a cópia de trabalho fica em uma pasta temporária
 exclusiva da operação. O aplicativo remove essa pasta ao terminar e também se

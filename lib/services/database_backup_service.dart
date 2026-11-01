@@ -95,71 +95,80 @@ class DatabaseBackupService {
         2,
       );
     }
-    final args = <String>['-database-url-from-env', '-schema', schema];
-    final temporaryOutput = operation == DatabaseOperation.backup
-        ? p.join(
-            Directory.systemTemp.path,
-            'kontabb-backup-${DateTime.now().microsecondsSinceEpoch}.sql.gz',
-          )
-        : null;
-    final temporaryInput = operation == DatabaseOperation.restore
-        ? p.join(
-            Directory.systemTemp.path,
-            'kontabb-restore-${DateTime.now().microsecondsSinceEpoch}${inputFile!.toLowerCase().endsWith('.gz') ? '.sql.gz' : '.sql'}',
-          )
-        : null;
-    if (temporaryInput != null) await File(inputFile!).copy(temporaryInput);
-    switch (operation) {
-      case DatabaseOperation.backup:
-        args.addAll(['-mode', 'backup', '-output', temporaryOutput!]);
-      case DatabaseOperation.restore:
-        args.addAll(['-mode', 'restore', '-input', temporaryInput!]);
-        if (dryRun) args.add('-dry-run');
-        if (noTruncate) args.add('-no-truncate');
-        if (skipMissingEmptyTables.isNotEmpty) {
-          args.addAll([
-            '-skip-missing-empty-tables',
-            skipMissingEmptyTables.join(','),
-          ]);
-        }
-      case DatabaseOperation.validate:
-        args.add('-validate');
-    }
-    final environment = Map<String, String>.from(Platform.environment)
-      ..['DATABASE_URL'] = databaseUrl;
-    final process = await Process.start(
-      helperPath,
-      args,
-      runInShell: false,
-      environment: environment,
-    );
-    _process = process;
-    final lines = <String>[];
-    Future<void> collect(Stream<List<int>> stream) async {
-      await for (final line
-          in stream.transform(utf8.decoder).transform(const LineSplitter())) {
-        lines.add(line);
-        onLine?.call(line);
+    // O helper precisa de um caminho acessível fora da sandbox do seletor de
+    // arquivos. A cópia temporária fica em um diretório exclusivo da operação.
+    final temporaryDir = operation == DatabaseOperation.validate
+        ? null
+        : await Directory.systemTemp.createTemp('kontabb-bkp-');
+    try {
+      final args = <String>['-database-url-from-env', '-schema', schema];
+      final temporaryOutput = operation == DatabaseOperation.backup
+          ? p.join(temporaryDir!.path, 'backup.sql.gz')
+          : null;
+      final temporaryInput = operation == DatabaseOperation.restore
+          ? p.join(
+              temporaryDir!.path,
+              inputFile!.toLowerCase().endsWith('.gz')
+                  ? 'restore.sql.gz'
+                  : 'restore.sql',
+            )
+          : null;
+      if (temporaryInput != null) await File(inputFile!).copy(temporaryInput);
+      switch (operation) {
+        case DatabaseOperation.backup:
+          args.addAll(['-mode', 'backup', '-output', temporaryOutput!]);
+        case DatabaseOperation.restore:
+          args.addAll(['-mode', 'restore', '-input', temporaryInput!]);
+          if (dryRun) args.add('-dry-run');
+          if (noTruncate) args.add('-no-truncate');
+          if (skipMissingEmptyTables.isNotEmpty) {
+            args.addAll([
+              '-skip-missing-empty-tables',
+              skipMissingEmptyTables.join(','),
+            ]);
+          }
+        case DatabaseOperation.validate:
+          args.add('-validate');
       }
-    }
+      final environment = Map<String, String>.from(Platform.environment)
+        ..['DATABASE_URL'] = databaseUrl;
+      final process = await Process.start(
+        helperPath,
+        args,
+        runInShell: false,
+        environment: environment,
+      );
+      _process = process;
+      var exited = false;
+      try {
+        final lines = <String>[];
+        Future<void> collect(Stream<List<int>> stream) async {
+          await for (final line
+              in stream
+                  .transform(utf8.decoder)
+                  .transform(const LineSplitter())) {
+            lines.add(line);
+            onLine?.call(line);
+          }
+        }
 
-    await Future.wait([collect(process.stdout), collect(process.stderr)]);
-    final code = await process.exitCode;
-    _process = null;
-    if (code == 0 && temporaryOutput != null) {
-      await File(temporaryOutput).copy(outputFile!);
+        await Future.wait([collect(process.stdout), collect(process.stderr)]);
+        final code = await process.exitCode;
+        exited = true;
+        if (code == 0 && temporaryOutput != null) {
+          await File(temporaryOutput).copy(outputFile!);
+        }
+        return DatabaseBackupResult(exitCode: code, output: lines.join('\n'));
+      } finally {
+        if (!exited) {
+          process.kill();
+          await process.exitCode;
+        }
+        _process = null;
+      }
+    } finally {
+      if (temporaryDir != null) await temporaryDir.delete(recursive: true);
     }
-    if (temporaryOutput != null) {
-      try {
-        await File(temporaryOutput).delete();
-      } catch (_) {}
-    }
-    if (temporaryInput != null) {
-      try {
-        await File(temporaryInput).delete();
-      } catch (_) {}
-    }
-    return DatabaseBackupResult(exitCode: code, output: lines.join('\n'));
   }
 
   /// Extrai o valor de DATABASE_URL a partir do conteúdo de um arquivo .env.

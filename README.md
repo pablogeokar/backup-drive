@@ -59,7 +59,8 @@ bash scripts/build-macos-release.sh
 Os scripts de release recompilam o helper do projeto irmão `backup-restore/`,
 conferem `KONTABB v1.2` e a opção `skip-missing-empty-tables` no binário
 embarcado, e criam arquivos ZIP locais em `build/release/`. No macOS o helper
-é universal (Apple Silicon e Intel), como o aplicativo. O script Windows deve
+é universal (Apple Silicon e Intel), como o aplicativo; o script também compara
+o helper embarcado byte a byte com o recém-compilado. O script Windows deve
 ser executado em um host Windows com Visual Studio instalado; o binário Go
 para Windows sozinho não constitui um pacote do aplicativo validado. Os ZIPs
 locais **não têm assinatura de distribuição nem notarização**: assine, notarize quando
@@ -70,6 +71,11 @@ PostgreSQL é opcional e exige os nomes exatos separados por vírgula; qualquer
 linha encontrada no backup para uma dessas tabelas faz o restore abortar e
 reverter a transação. Teste primeiro com **Simular restauração** em um banco
 isolado. A interface não altera bancos automaticamente.
+
+Durante backup e restauração, a cópia de trabalho fica em uma pasta temporária
+exclusiva da operação. O aplicativo remove essa pasta ao terminar e também se
+o helper não puder iniciar. O arquivo selecionado pelo usuário permanece no
+caminho original.
 
 ---
 

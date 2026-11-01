@@ -100,6 +100,49 @@ SOME_VAR=123
         result.output,
         contains('ARG:sped_contabilistas,fiscal_lancamentos'),
       );
+      final arguments = result.output.split('\n');
+      final inputArgument = arguments.indexOf('ARG:-input');
+      expect(inputArgument, isNonNegative);
+      final temporaryInput = File(
+        arguments[inputArgument + 1].substring('ARG:'.length),
+      );
+      expect(temporaryInput.path, isNot(input.path));
+      expect(temporaryInput.parent.existsSync(), isFalse);
+    },
+  );
+
+  test(
+    'removes the private temporary copy if the helper cannot start',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('backup-helper-');
+      addTearDown(() => directory.delete(recursive: true));
+      final input = File('${directory.path}/backup.sql');
+      await input.writeAsString('sensitive test backup');
+      final service = _TestBackupService('${directory.path}/missing-helper');
+      Set<String> temporaryWorkspaces() => Directory.systemTemp
+          .listSync()
+          .whereType<Directory>()
+          .where(
+            (entry) => entry.uri.pathSegments
+                .where((segment) => segment.isNotEmpty)
+                .last
+                .startsWith('kontabb-bkp-'),
+          )
+          .map((entry) => entry.path)
+          .toSet();
+      final before = temporaryWorkspaces();
+
+      await expectLater(
+        service.run(
+          operation: DatabaseOperation.restore,
+          databaseUrl: 'postgresql://user:pass@localhost/test',
+          inputFile: input.path,
+        ),
+        throwsA(isA<ProcessException>()),
+      );
+
+      expect(temporaryWorkspaces(), before);
+      expect(await input.readAsString(), 'sensitive test backup');
     },
   );
 

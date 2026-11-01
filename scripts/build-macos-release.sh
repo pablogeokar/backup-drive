@@ -17,7 +17,7 @@ archive_path="$app_dir/build/release/backup-drive-macos-helper-v1.2.zip"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-for tool in go lipo flutter codesign ditto unzip shasum; do
+for tool in go lipo flutter codesign ditto unzip shasum cmp; do
   command -v "$tool" >/dev/null || { echo "Ferramenta ausente: $tool" >&2; exit 1; }
 done
 
@@ -45,6 +45,10 @@ fi
 (cd "$app_dir" && flutter build macos)
 
 test -x "$embedded_helper"
+if ! cmp -s "$helper_path" "$embedded_helper"; then
+  echo "O build embarcou um helper diferente do recém-compilado." >&2
+  exit 1
+fi
 for arch in arm64 x86_64; do
   lipo -verify_arch "$arch" "$app_executable"
   lipo -verify_arch "$arch" "$embedded_helper"

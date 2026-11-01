@@ -63,6 +63,23 @@ try {
 
 New-Item -ItemType Directory -Force -Path (Split-Path $archivePath) | Out-Null
 Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $archivePath -Force
+$checkDir = Join-Path ([IO.Path]::GetTempPath()) ('kontabb-release-check-' + [guid]::NewGuid().ToString('N'))
+try {
+    Expand-Archive -LiteralPath $archivePath -DestinationPath $checkDir
+    $archivedApp = Join-Path $checkDir 'backup_drive.exe'
+    $archivedHelper = Join-Path $checkDir 'kontabb-bkp.exe'
+    if (-not (Test-Path $archivedApp -PathType Leaf) -or
+        -not (Test-Path $archivedHelper -PathType Leaf)) {
+        throw 'O ZIP não contém o aplicativo e o helper esperados.'
+    }
+    if ((Get-FileHash $archivedHelper -Algorithm SHA256).Hash -ne $sourceHash) {
+        throw 'O helper extraído do ZIP difere do recém-compilado.'
+    }
+} finally {
+    if (Test-Path $checkDir) {
+        Remove-Item -LiteralPath $checkDir -Recurse -Force
+    }
+}
 Write-Host "Pacote local: $archivePath"
 Get-FileHash $archivePath -Algorithm SHA256 | Format-List
 Write-Host 'A assinatura do executável/instalador para distribuição deve ser feita separadamente.'

@@ -77,6 +77,21 @@ exclusiva da operação. O aplicativo remove essa pasta ao terminar e também se
 o helper não puder iniciar. O arquivo selecionado pelo usuário permanece no
 caminho original.
 
+### Pacote Windows em runner hospedado
+
+O workflow manual `backup-restore/.github/workflows/build-windows.yml` oferece
+um runner Windows 2022 quando não houver um computador Windows local. Ele fica
+no repositório do helper, busca o app público pela branch, tag ou commit
+informado ao iniciar a execução, roda testes Go e Flutter e arquiva o ZIP com
+um manifesto de commits e SHA-256 por 14 dias. Depois de enviar as mudanças
+dos dois repositórios ao GitHub, inicie o workflow no repositório do helper em
+**Actions → Build Windows Backup Drive → Run workflow**. O artefato fica sob as
+permissões desse repositório; nenhum token adicional é necessário. O pacote
+não é publicado nem instalado automaticamente. O script Windows agora confere
+também os arquivos extraídos do ZIP; assinatura do executável e teste de
+instalação/restauração em uma máquina Windows continuam necessários antes da
+distribuição aos operadores.
+
 ---
 
 ## Estrutura do Projeto

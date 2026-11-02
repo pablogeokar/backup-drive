@@ -39,6 +39,8 @@ class _DatabasePageState extends State<DatabasePage> {
   bool _connectionSaved = false;
   bool _showConnectionForm = true;
   bool _outputAuthorized = true;
+  List<SavedDatabaseConnection> _connections = [];
+  int? _selectedConnectionId;
 
   @override
   void initState() {
@@ -66,6 +68,7 @@ class _DatabasePageState extends State<DatabasePage> {
   Future<void> _loadPreferences() async {
     final database = AppDatabase.instance;
     final connection = await database.getDefaultDatabaseConnection();
+    final connections = await database.getDatabaseConnections();
     var outputDirectory = await database.getString('database_output_directory');
     var outputBookmark = await database.getString(
       'database_output_directory_bookmark',
@@ -133,6 +136,8 @@ class _DatabasePageState extends State<DatabasePage> {
       _noTruncate = noTruncate ?? false;
       _connectionSaved = connection != null;
       _showConnectionForm = connection == null;
+      _connections = connections;
+      _selectedConnectionId = connection?.id;
       _outputAuthorized = outputAuthorized;
       _loading = false;
     });
@@ -152,25 +157,135 @@ class _DatabasePageState extends State<DatabasePage> {
   }
 
   Future<bool> _saveConnection({bool showMessage = true}) async {
+    if (_connectionSaved) return true;
+    if (!_showConnectionForm) {
+      setState(() => _showConnectionForm = true);
+      await WidgetsBinding.instance.endOfFrame;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) {
       setState(() => _showConnectionForm = true);
       return false;
     }
     final schema = _schema.text.trim().isEmpty ? 'public' : _schema.text.trim();
-    await AppDatabase.instance.saveDefaultDatabaseConnection(
+    final saved = await AppDatabase.instance.saveDatabaseConnection(
+      id: _selectedConnectionId,
       name: _connectionName.text.trim().isEmpty
           ? 'PostgreSQL principal'
           : _connectionName.text.trim(),
       databaseUrl: _databaseUrl.text.trim(),
       schema: schema,
     );
+    await AppDatabase.instance.setDefaultDatabaseConnection(saved.id);
+    final connections = await AppDatabase.instance.getDatabaseConnections();
     if (!mounted) return true;
     setState(() {
+      _selectedConnectionId = saved.id;
+      _connections = connections;
       _connectionSaved = true;
       _showConnectionForm = false;
     });
     if (showMessage) _message('Conexão salva neste computador.');
     return true;
+  }
+
+  Future<bool> _discardDraftIfNeeded() async {
+    if (_connectionSaved ||
+        (_selectedConnectionId == null && _databaseUrl.text.trim().isEmpty)) {
+      return true;
+    }
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Descartar alterações?'),
+            content: const Text('A conexão em edição ainda não foi salva.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Continuar editando'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Descartar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _selectConnection(SavedDatabaseConnection connection) async {
+    if (_busy || connection.id == _selectedConnectionId) return;
+    if (!await _discardDraftIfNeeded()) return;
+    await AppDatabase.instance.setDefaultDatabaseConnection(connection.id);
+    final connections = await AppDatabase.instance.getDatabaseConnections();
+    if (!mounted) return;
+    setState(() {
+      _selectedConnectionId = connection.id;
+      _connections = connections;
+      _connectionSaved = false;
+      _connectionName.text = connection.name;
+      _databaseUrl.text = connection.databaseUrl;
+      _schema.text = connection.schema;
+      _connectionSaved = true;
+      _showConnectionForm = false;
+      _log = '';
+    });
+  }
+
+  Future<void> _newConnection() async {
+    if (_busy || !await _discardDraftIfNeeded()) return;
+    setState(() {
+      _selectedConnectionId = null;
+      _connectionName.text = 'PostgreSQL ${_connections.length + 1}';
+      _databaseUrl.text = '';
+      _schema.text = 'public';
+      _connectionSaved = false;
+      _showConnectionForm = true;
+      _log = '';
+    });
+  }
+
+  Future<void> _deleteConnection(SavedDatabaseConnection connection) async {
+    if (_busy) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Excluir conexão?'),
+            content: Text(
+              'Remover "${connection.name}" deste computador? Os bancos e backups não serão apagados.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Excluir conexão'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    await AppDatabase.instance.deleteDatabaseConnection(connection.id);
+    final active = await AppDatabase.instance.getDefaultDatabaseConnection();
+    final connections = await AppDatabase.instance.getDatabaseConnections();
+    if (!mounted) return;
+    setState(() {
+      _connections = connections;
+      if (_selectedConnectionId == connection.id) {
+        _selectedConnectionId = active?.id;
+        _connectionSaved = false;
+        _connectionName.text = active?.name ?? '';
+        _databaseUrl.text = active?.databaseUrl ?? '';
+        _schema.text = active?.schema ?? 'public';
+        _connectionSaved = active != null;
+        _showConnectionForm = active == null;
+        _log = '';
+      }
+    });
   }
 
   Future<void> _importEnv() async {
@@ -198,6 +313,37 @@ class _DatabasePageState extends State<DatabasePage> {
       _message(
         'Dados importados. Você não precisará selecionar o .env novamente.',
       );
+    }
+  }
+
+  Future<void> _importLegacyConnections() async {
+    if (!await _discardDraftIfNeeded()) return;
+    final path = await _envPickerChannel.invokeMethod<String>(
+      'pickLegacySettings',
+    );
+    if (path == null) return;
+    try {
+      final imported = await AppDatabase.instance.importDatabaseConnections(
+        path,
+      );
+      final active = await AppDatabase.instance.getDefaultDatabaseConnection();
+      final connections = await AppDatabase.instance.getDatabaseConnections();
+      if (!mounted) return;
+      setState(() {
+        _connections = connections;
+        _selectedConnectionId = active?.id;
+        _connectionSaved = false;
+        _connectionName.text = active?.name ?? 'PostgreSQL principal';
+        _databaseUrl.text = active?.databaseUrl ?? '';
+        _schema.text = active?.schema ?? 'public';
+        _connectionSaved = active != null;
+        _showConnectionForm = active == null;
+      });
+      _message('$imported conexão(ões) importada(s).');
+    } on Exception {
+      if (mounted) {
+        _message('Não foi possível ler as conexões de settings.sqlite3.');
+      }
     }
   }
 
@@ -290,7 +436,15 @@ class _DatabasePageState extends State<DatabasePage> {
     final timestamp =
         '${now.year}${two(now.month)}${two(now.day)}-'
         '${two(now.hour)}${two(now.minute)}${two(now.second)}';
-    return p.join(_outputDirectory!, 'kontabb-$timestamp.sql.gz');
+    final profile = _connectionName.text
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return p.join(
+      _outputDirectory!,
+      'kontabb-${profile.isEmpty ? 'postgres' : profile}-$timestamp.sql.gz',
+    );
   }
 
   Future<void> _saveOperationPreferences() async {
@@ -394,8 +548,9 @@ class _DatabasePageState extends State<DatabasePage> {
           icon: const Icon(Icons.warning_amber_rounded),
           title: const Text('Confirmar restauração'),
           content: Text(
-            'A restauração pode substituir dados de "${_connectionName.text}". '
-            'Confirme somente após validar o destino.',
+            'Destino: ${_connectionName.text} (${_connectionTarget()}).\n\n'
+            'Arquivo: ${p.basename(_input ?? '')}.\n\n'
+            'A restauração pode substituir dados neste banco. Confira o destino antes de continuar.',
           ),
           actions: [
             TextButton(
@@ -417,6 +572,16 @@ class _DatabasePageState extends State<DatabasePage> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
+  String _connectionTarget([String? url]) {
+    final uri = Uri.tryParse(url ?? _databaseUrl.text.trim());
+    if (uri == null || uri.host.isEmpty) return 'PostgreSQL';
+    final database = uri.pathSegments
+        .where((part) => part.isNotEmpty)
+        .lastOrNull;
+    return '${uri.host}${uri.hasPort ? ':${uri.port}' : ''}'
+        '${database == null ? '' : ' / $database'}';
+  }
+
   @override
   void dispose() {
     _databaseUrl.removeListener(_markConnectionAsChanged);
@@ -434,7 +599,7 @@ class _DatabasePageState extends State<DatabasePage> {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('PostgreSQL'),
+        title: const Text('KONTABB  /  PostgreSQL'),
         actions: [
           if (_busy)
             IconButton(
@@ -452,13 +617,12 @@ class _DatabasePageState extends State<DatabasePage> {
                 Text(
                   'Backup e restauração',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'A conexão e suas preferências ficam salvas localmente. '
-                  'Depois da configuração inicial, basta escolher a operação.',
+                  'Escolha o banco de origem ou destino. As conexões ficam salvas somente neste computador.',
                   style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
@@ -495,146 +659,245 @@ class _DatabasePageState extends State<DatabasePage> {
   }
 
   Widget _buildConnectionCard(ColorScheme colorScheme) {
-    final configured = _databaseUrl.text.trim().isNotEmpty;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          ListTile(
-            leading: CircleAvatar(
-              backgroundColor: configured
-                  ? colorScheme.primaryContainer
-                  : colorScheme.errorContainer,
-              child: Icon(
-                configured ? Icons.dns_outlined : Icons.link_off_outlined,
-                color: configured
-                    ? colorScheme.onPrimaryContainer
-                    : colorScheme.onErrorContainer,
-              ),
-            ),
-            title: Text(
-              configured ? _connectionName.text : 'Configure sua conexão',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              configured
-                  ? '${Uri.tryParse(_databaseUrl.text)?.host ?? 'PostgreSQL'} • esquema ${_schema.text}'
-                  : 'Informe os dados uma única vez.',
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_connectionSaved)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: Chip(
-                      avatar: Icon(Icons.check, size: 16),
-                      label: Text('Salva'),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                IconButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(
-                          () => _showConnectionForm = !_showConnectionForm,
-                        ),
-                  icon: Icon(
-                    _showConnectionForm
-                        ? Icons.expand_less
-                        : Icons.edit_outlined,
-                  ),
-                  tooltip: _showConnectionForm
-                      ? 'Recolher configuração'
-                      : 'Editar conexão',
-                ),
-              ],
-            ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 200),
-            crossFadeState: _showConnectionForm
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Form(
-                key: _formKey,
-                child: Column(
+                Row(
                   children: [
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _connectionName,
-                      enabled: !_busy,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome da conexão',
-                        prefixIcon: Icon(Icons.label_outline),
-                        border: OutlineInputBorder(),
+                    Icon(Icons.dns_outlined, color: colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Bancos cadastrados',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _databaseUrl,
-                      enabled: !_busy,
-                      obscureText: _hideDatabaseUrl,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      validator: _validateDatabaseUrl,
-                      decoration: InputDecoration(
-                        labelText: 'URL do PostgreSQL',
-                        hintText: 'postgresql://usuario:senha@host:5432/banco',
-                        prefixIcon: const Icon(Icons.key_outlined),
-                        suffixIcon: IconButton(
-                          onPressed: () => setState(
-                            () => _hideDatabaseUrl = !_hideDatabaseUrl,
-                          ),
-                          icon: Icon(
-                            _hideDatabaseUrl
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                          tooltip: _hideDatabaseUrl
-                              ? 'Mostrar URL'
-                              : 'Ocultar URL',
-                        ),
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _schema,
-                      enabled: !_busy,
-                      decoration: const InputDecoration(
-                        labelText: 'Esquema',
-                        prefixIcon: Icon(Icons.account_tree_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : _importEnv,
-                          icon: const Icon(Icons.file_upload_outlined),
-                          label: const Text('Importar .env'),
-                        ),
-                        const Spacer(),
-                        FilledButton.icon(
-                          onPressed: _busy ? null : _saveConnection,
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Salvar conexão'),
-                        ),
-                      ],
+                    FilledButton.tonalIcon(
+                      onPressed: _busy ? null : _newConnection,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Nova conexão'),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 8),
+                if (_connections.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'Cadastre um banco para começar. Você pode manter vários destinos de teste.',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                  )
+                else
+                  ..._connections.map((connection) {
+                    final selected = connection.id == _selectedConnectionId;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Material(
+                        color: selected
+                            ? colorScheme.primaryContainer
+                            : colorScheme.surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(10),
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: selected
+                                  ? colorScheme.primary.withAlpha(90)
+                                  : colorScheme.outlineVariant,
+                            ),
+                          ),
+                          leading: Icon(
+                            selected
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            color: selected
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          title: Text(
+                            connection.name,
+                            style: TextStyle(
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${_connectionTarget(connection.databaseUrl)} • esquema ${connection.schema}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: IconButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _deleteConnection(connection),
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Excluir ${connection.name}',
+                          ),
+                          onTap: _busy
+                              ? null
+                              : () => _selectConnection(connection),
+                        ),
+                      ),
+                    );
+                  }),
+                if (Platform.isMacOS) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _busy ? null : _importLegacyConnections,
+                    icon: const Icon(Icons.move_to_inbox_outlined),
+                    label: const Text('Importar conexões da versão anterior'),
+                  ),
+                ],
+              ],
             ),
-            secondChild: const SizedBox(width: double.infinity),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedConnectionId == null
+                            ? 'Nova conexão PostgreSQL'
+                            : _connectionName.text,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (_connectionSaved)
+                      Chip(
+                        avatar: const Icon(
+                          Icons.check_circle_outline,
+                          size: 16,
+                        ),
+                        label: const Text('Ativa'),
+                        backgroundColor: colorScheme.primaryContainer,
+                      ),
+                    IconButton(
+                      onPressed: _busy
+                          ? null
+                          : () => setState(
+                              () => _showConnectionForm = !_showConnectionForm,
+                            ),
+                      icon: Icon(
+                        _showConnectionForm
+                            ? Icons.expand_less
+                            : Icons.edit_outlined,
+                      ),
+                      tooltip: _showConnectionForm
+                          ? 'Recolher formulário'
+                          : 'Editar conexão',
+                    ),
+                  ],
+                ),
+                if (_selectedConnectionId != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_connectionTarget()} • esquema ${_schema.text}',
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+                if (!_connectionSaved)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Alterações pendentes. Salve antes de usar esta conexão.',
+                      style: TextStyle(color: colorScheme.primary),
+                    ),
+                  ),
+                if (_showConnectionForm) ...[
+                  const Divider(height: 28),
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _connectionName,
+                          enabled: !_busy,
+                          validator: (value) => (value?.trim().isEmpty ?? true)
+                              ? 'Informe um nome para identificar o banco.'
+                              : null,
+                          decoration: const InputDecoration(
+                            labelText: 'Nome da conexão',
+                            hintText: 'Ex.: Homologação, teste 02',
+                            prefixIcon: Icon(Icons.label_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _databaseUrl,
+                          enabled: !_busy,
+                          obscureText: _hideDatabaseUrl,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          validator: _validateDatabaseUrl,
+                          decoration: InputDecoration(
+                            labelText: 'String de conexão PostgreSQL',
+                            hintText:
+                                'postgresql://usuario:senha@host:5432/banco',
+                            prefixIcon: const Icon(Icons.key_outlined),
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(
+                                () => _hideDatabaseUrl = !_hideDatabaseUrl,
+                              ),
+                              icon: Icon(
+                                _hideDatabaseUrl
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                              tooltip: _hideDatabaseUrl
+                                  ? 'Mostrar URL'
+                                  : 'Ocultar URL',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _schema,
+                          enabled: !_busy,
+                          decoration: const InputDecoration(
+                            labelText: 'Esquema',
+                            prefixIcon: Icon(Icons.account_tree_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : _importEnv,
+                              icon: const Icon(Icons.file_upload_outlined),
+                              label: const Text('Importar .env'),
+                            ),
+                            const Spacer(),
+                            FilledButton.icon(
+                              onPressed: _busy ? null : _saveConnection,
+                              icon: const Icon(Icons.save_outlined),
+                              label: const Text('Salvar conexão'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -651,6 +914,15 @@ class _DatabasePageState extends State<DatabasePage> {
           Text(
             'O nome do arquivo é gerado automaticamente com data e hora.',
             style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'ORIGEM  ·  ${_selectedConnectionId == null ? 'Salve uma conexão' : _connectionName.text}',
+            style: TextStyle(
+              color: colorScheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 16),
           ListTile(
@@ -706,6 +978,15 @@ class _DatabasePageState extends State<DatabasePage> {
           Text(
             'Selecione um arquivo .sql ou .sql.gz e revise as opções.',
             style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'DESTINO  ·  ${_selectedConnectionId == null ? 'Salve uma conexão' : _connectionName.text}',
+            style: TextStyle(
+              color: colorScheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(

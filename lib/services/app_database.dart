@@ -35,6 +35,7 @@ class SavedDatabaseConnection {
 /// backups. Credenciais são persistidas localmente, sem sincronização externa.
 class AppDatabase {
   AppDatabase._();
+  AppDatabase.forTesting(this._database);
 
   static final AppDatabase instance = AppDatabase._();
 
@@ -228,6 +229,150 @@ class AppDatabase {
       limit: 1,
     );
     return rows.isEmpty ? null : SavedDatabaseConnection.fromMap(rows.first);
+  }
+
+  Future<List<SavedDatabaseConnection>> getDatabaseConnections() async {
+    final rows = await _db.query(
+      'database_connections',
+      orderBy: 'is_default DESC, name COLLATE NOCASE ASC',
+    );
+    return rows.map(SavedDatabaseConnection.fromMap).toList();
+  }
+
+  Future<int> importDatabaseConnections(String sourcePath) async {
+    final source = await databaseFactoryFfi.openDatabase(
+      sourcePath,
+      options: OpenDatabaseOptions(readOnly: true),
+    );
+    try {
+      final rows = await source.query(
+        'database_connections',
+        orderBy: 'is_default DESC, id ASC',
+      );
+      var imported = 0;
+      for (final row in rows) {
+        final name = row['name'] as String;
+        final databaseUrl = row['database_url'] as String;
+        final schema = row['schema_name'] as String;
+        final matches = await _db.query(
+          'database_connections',
+          columns: ['id'],
+          where: 'name = ? AND database_url = ? AND schema_name = ?',
+          whereArgs: [name, databaseUrl, schema],
+          limit: 1,
+        );
+        if (matches.isNotEmpty) continue;
+        await saveDatabaseConnection(
+          name: name,
+          databaseUrl: databaseUrl,
+          schema: schema,
+        );
+        imported++;
+      }
+      return imported;
+    } finally {
+      await source.close();
+    }
+  }
+
+  Future<SavedDatabaseConnection> saveDatabaseConnection({
+    int? id,
+    required String name,
+    required String databaseUrl,
+    required String schema,
+  }) async {
+    return _db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      final hasDefault = await txn.query(
+        'database_connections',
+        columns: ['id'],
+        where: 'is_default = 1',
+        limit: 1,
+      );
+      if (id == null) {
+        id = await txn.insert('database_connections', {
+          'name': name,
+          'database_url': databaseUrl,
+          'schema_name': schema,
+          'is_default': hasDefault.isEmpty ? 1 : 0,
+          'created_at': now,
+          'updated_at': now,
+        });
+      } else {
+        final count = await txn.update(
+          'database_connections',
+          {
+            'name': name,
+            'database_url': databaseUrl,
+            'schema_name': schema,
+            'updated_at': now,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (count == 0) throw StateError('Conexão não encontrada.');
+      }
+      return SavedDatabaseConnection(
+        id: id!,
+        name: name,
+        databaseUrl: databaseUrl,
+        schema: schema,
+      );
+    });
+  }
+
+  Future<void> setDefaultDatabaseConnection(int id) async {
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'database_connections',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Conexão não encontrada.');
+      await txn.update('database_connections', {'is_default': 0});
+      await txn.update(
+        'database_connections',
+        {'is_default': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  Future<void> deleteDatabaseConnection(int id) async {
+    await _db.transaction((txn) async {
+      final current = await txn.query(
+        'database_connections',
+        columns: ['is_default'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (current.isEmpty) return;
+      await txn.delete(
+        'database_connections',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (current.first['is_default'] == 1) {
+        final next = await txn.query(
+          'database_connections',
+          columns: ['id'],
+          orderBy: 'name COLLATE NOCASE ASC',
+          limit: 1,
+        );
+        if (next.isNotEmpty) {
+          await txn.update(
+            'database_connections',
+            {'is_default': 1},
+            where: 'id = ?',
+            whereArgs: [next.first['id']],
+          );
+        }
+      }
+    });
   }
 
   Future<SavedDatabaseConnection> saveDefaultDatabaseConnection({

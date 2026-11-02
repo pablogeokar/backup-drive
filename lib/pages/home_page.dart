@@ -176,29 +176,23 @@ class _HomePageState extends State<HomePage>
         children: [
           // Logo / título
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 32, 20, 24),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.cloud_sync,
-                    color: colorScheme.onPrimary,
-                    size: 20,
-                  ),
+                Image.asset(
+                  'assets/brand/kontabb-logo.png',
+                  width: 176,
+                  height: 76,
+                  fit: BoxFit.contain,
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Backup Drive',
+                const SizedBox(height: 8),
+                const Text(
+                  'BACKUP DRIVE',
                   style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurface,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
                   ),
                 ),
               ],
@@ -245,22 +239,15 @@ class _HomePageState extends State<HomePage>
         bottom: false,
         child: Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: colorScheme.primary,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                Icons.cloud_sync,
-                color: colorScheme.onPrimary,
-                size: 18,
-              ),
+            Image.asset(
+              'assets/brand/kontabb-logo.png',
+              width: 110,
+              height: 44,
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 10),
             Text(
-              'Backup Drive',
+              'Backup',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -542,6 +529,18 @@ class _HomePageState extends State<HomePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'Cloudflare R2',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Sincronize os arquivos para uma pasta local com retomada automática.',
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 28),
           _buildDirectorySection(colorScheme),
           const SizedBox(height: 28),
           _buildSyncSection(colorScheme),

@@ -3,7 +3,7 @@
 Aplicativo desktop Flutter para gerenciamento de backups da Kontabb:
 1. **Cloudflare R2**: Backup local completo e sincronização incremental de buckets (`teste` e `documents`).
 2. **PostgreSQL**: Backup, restauração com validação de integridade e simulação (*dry-run*) utilizando o utilitário nativo embarcado `kontabb-bkp`.
-3. **Configuração local**: Conexões, caminhos e preferências são mantidos em um banco SQLite interno; o `.env` é necessário apenas se o usuário optar por importá-lo uma vez.
+3. **Configuração local**: Várias conexões PostgreSQL, caminhos e preferências são mantidos em um banco SQLite interno; o `.env` é necessário apenas se o usuário optar por importá-lo.
 
 Compatível com **Windows** e **macOS**.
 
@@ -121,6 +121,10 @@ Na primeira execução após a atualização, o aplicativo migra automaticamente
 Depois da migração, a operação não depende mais do `.env`. O arquivo SQLite fica na pasta de suporte da aplicação do usuário, fora das pastas de backup. No macOS e em outros sistemas Unix, o diretório recebe permissão `0700` e o arquivo principal `0600`. As credenciais são locais e não são enviadas a serviços externos pelo aplicativo.
 
 No macOS, a autorização de pastas externas também é persistida no SQLite por meio de um *security-scoped bookmark*. Instalações atualizadas precisam autorizar novamente a pasta de backup uma única vez; nas execuções seguintes, o acesso é restaurado automaticamente.
+
+A identificação do app macOS é `br.com.kontabb.backup`. Ao atualizar uma instalação anterior (`com.example.backupDrive`), a sandbox cria um novo espaço de dados. Na tela PostgreSQL, use **Importar conexões da versão anterior** e selecione o `settings.sqlite3` antigo no seletor que abre na pasta correspondente. As conexões são copiadas sem alterar o arquivo antigo nem os bancos PostgreSQL; conexões idênticas já cadastradas são ignoradas. Pastas externas precisam ser reautorizadas no novo app. O app anterior e seus dados não são removidos.
+
+Na tela PostgreSQL, use **Nova conexão** para cadastrar cada banco. Selecionar um perfil define a origem do backup e o destino da restauração. A tela e a confirmação da restauração exibem o nome e o host/banco ativos sem mostrar a senha.
 
 ---
 

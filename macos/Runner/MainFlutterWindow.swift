@@ -28,13 +28,25 @@ class MainFlutterWindow: NSWindow {
       name: "backup_drive/env_picker",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
     envPicker.setMethodCallHandler { call, result in
-      guard call.method == "pickEnv" else { result(FlutterMethodNotImplemented); return }
+      guard call.method == "pickEnv" || call.method == "pickLegacySettings" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
       let panel = NSOpenPanel()
       panel.canChooseFiles = true
       panel.canChooseDirectories = false
       panel.allowsMultipleSelection = false
       panel.showsHiddenFiles = true
-      panel.title = "Selecione o arquivo .env"
+      if call.method == "pickLegacySettings" {
+        panel.title = "Selecione settings.sqlite3 do KONTABB Backup anterior"
+        panel.message = "As conexões serão copiadas para a nova versão. Nenhum banco será alterado."
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+          .components(separatedBy: "/Library/Containers/").first ?? NSHomeDirectory()
+        panel.directoryURL = URL(fileURLWithPath: home)
+          .appendingPathComponent("Library/Containers/com.example.backupDrive/Data/Library/Application Support/com.example.backupDrive/Kontabb Backup Drive")
+      } else {
+        panel.title = "Selecione o arquivo .env"
+      }
       if panel.runModal() == .OK, let url = panel.url {
         MainFlutterWindow.scopedEnvURL?.stopAccessingSecurityScopedResource()
         if url.startAccessingSecurityScopedResource() {

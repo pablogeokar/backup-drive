@@ -1,8 +1,9 @@
 # Kontabb Backup Drive
 
 Aplicativo desktop Flutter para gerenciamento de backups da Kontabb:
+
 1. **Cloudflare R2**: Backup local completo e sincronização incremental de buckets (`teste` e `documents`).
-2. **PostgreSQL**: Backup, restauração com validação de integridade e simulação (*dry-run*) utilizando o utilitário nativo embarcado `kontabb-bkp`.
+2. **PostgreSQL**: Backup, restauração com validação de integridade e simulação (_dry-run_) utilizando o utilitário nativo embarcado `kontabb-bkp`.
 3. **Configuração local**: Várias conexões PostgreSQL, caminhos e preferências são mantidos em um banco SQLite interno; o `.env` é necessário apenas se o usuário optar por importá-lo.
 
 Compatível com **Windows** e **macOS**.
@@ -31,6 +32,7 @@ Uma sincronização baseada exclusivamente em mudanças, sem nenhuma listagem pe
 ## Executando o Projeto
 
 ### No Windows
+
 ```powershell
 # Instalar dependências
 flutter pub get
@@ -41,9 +43,31 @@ flutter run -d windows
 # Gerar e conferir o pacote local com o helper v1.2 (no Windows x64)
 .\scripts\build-windows-release.ps1
 ```
-*O executável `kontabb-bkp.exe` é automaticamente copiado para a pasta de saída do build pelo CMake.*
+
+_O executável `kontabb-bkp.exe` é automaticamente copiado para a pasta de saída do build pelo CMake._
+
+> **Execução de scripts bloqueada?** Por padrão o PowerShell impede a execução
+> de arquivos `.ps1` (`ExecutionPolicy` `Restricted`), exibindo a mensagem
+> _"running scripts is disabled on this system"_. Escolha uma das opções:
+>
+> ```powershell
+> # Opção 1 — contornar a política só nesta execução (não altera o sistema)
+> powershell -ExecutionPolicy Bypass -File .\scripts\build-windows-release.ps1
+>
+> # Opção 2 — liberar scripts para o seu usuário de forma permanente (sem admin)
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> # depois é possível rodar direto: .\scripts\build-windows-release.ps1
+>
+> # Opção 3 — liberar apenas na sessão atual do terminal
+> Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+> ```
+>
+> Se o script tiver sido baixado ou copiado de outra máquina e continuar
+> bloqueado mesmo com a política liberada, desbloqueie o arquivo:
+> `Unblock-File .\scripts\build-windows-release.ps1`.
 
 ### No macOS
+
 ```bash
 # Instalar dependências
 flutter pub get
@@ -54,7 +78,8 @@ flutter run -d macos
 # Gerar e conferir o pacote local universal com o helper v1.2
 bash scripts/build-macos-release.sh
 ```
-*O binário `kontabb-bkp` é automaticamente embarcado no diretório `Contents/MacOS/` do App Bundle pelo Xcode.*
+
+_O binário `kontabb-bkp` é automaticamente embarcado no diretório `Contents/MacOS/` do App Bundle pelo Xcode._
 
 Os scripts de release recompilam o helper do projeto irmão `backup-restore/`,
 conferem `KONTABB v1.2` e a opção `skip-missing-empty-tables` no binário
@@ -120,7 +145,7 @@ Na primeira execução após a atualização, o aplicativo migra automaticamente
 
 Depois da migração, a operação não depende mais do `.env`. O arquivo SQLite fica na pasta de suporte da aplicação do usuário, fora das pastas de backup. No macOS e em outros sistemas Unix, o diretório recebe permissão `0700` e o arquivo principal `0600`. As credenciais são locais e não são enviadas a serviços externos pelo aplicativo.
 
-No macOS, a autorização de pastas externas também é persistida no SQLite por meio de um *security-scoped bookmark*. Instalações atualizadas precisam autorizar novamente a pasta de backup uma única vez; nas execuções seguintes, o acesso é restaurado automaticamente.
+No macOS, a autorização de pastas externas também é persistida no SQLite por meio de um _security-scoped bookmark_. Instalações atualizadas precisam autorizar novamente a pasta de backup uma única vez; nas execuções seguintes, o acesso é restaurado automaticamente.
 
 A identificação do app macOS é `br.com.kontabb.backup`. Ao atualizar uma instalação anterior (`com.example.backupDrive`), a sandbox cria um novo espaço de dados. Na tela PostgreSQL, use **Importar conexões da versão anterior** e selecione o `settings.sqlite3` antigo no seletor que abre na pasta correspondente. As conexões são copiadas sem alterar o arquivo antigo nem os bancos PostgreSQL; conexões idênticas já cadastradas são ignoradas. Pastas externas precisam ser reautorizadas no novo app. O app anterior e seus dados não são removidos.
 
@@ -131,6 +156,7 @@ Na tela PostgreSQL, use **Nova conexão** para cadastrar cada banco. Selecionar 
 ## Resolução de Binários do Helper PostgreSQL
 
 O aplicativo busca o helper `kontabb-bkp` / `kontabb-bkp.exe` na seguinte ordem de prioridade:
+
 1. Variável de ambiente `KONTABB_BKP_PATH` (se definida)
 2. Diretório adjacente ao executável (`backup_drive.exe` no Windows ou `Contents/MacOS` no macOS)
 3. Pasta `Contents/Resources` (no macOS App Bundle)

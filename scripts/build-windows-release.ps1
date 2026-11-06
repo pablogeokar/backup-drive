@@ -2,7 +2,17 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $appDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$helperDir = (Resolve-Path (Join-Path $appDir '..\backup-restore')).Path
+$helperDir = $null
+foreach ($candidate in @('..\backup-restore', '..\Kontabb-backup-restore')) {
+    $candidatePath = Join-Path $appDir $candidate
+    if (Test-Path $candidatePath -PathType Container) {
+        $helperDir = (Resolve-Path $candidatePath).Path
+        break
+    }
+}
+if (-not $helperDir) {
+    throw "Projeto do helper não encontrado. Esperado ao lado de '$appDir' como 'backup-restore' ou 'Kontabb-backup-restore'."
+}
 $helperPath = Join-Path $helperDir 'bin\kontabb-bkp.exe'
 $releaseDir = Join-Path $appDir 'build\windows\x64\runner\Release'
 $embeddedHelper = Join-Path $releaseDir 'kontabb-bkp.exe'
